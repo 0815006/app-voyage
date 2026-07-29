@@ -1,7 +1,7 @@
 <template>
   <header class="header">
     <div class="header-left">
-      <h1 class="logo">⛵ Voyage 全栈平台</h1>
+      <h1 class="page-title">控制台</h1>
     </div>
     <div class="header-right">
       <!-- 工号 Tag / Input 无缝就地编辑 (Inline Edit) -->
@@ -82,17 +82,18 @@ function confirmEdit() {
   justify-content: space-between;
   padding: 0 20px;
   height: 100%;
+  min-height: 76px;
   background: linear-gradient(135deg, #1e3a5f 0%, #2a5298 100%);
   color: #fff;
   grid-row: 1 / 2;
-  grid-column: 1 / 3;
+  grid-column: 2 / 3;
 }
 
-.logo {
+.page-title {
   margin: 0;
-  font-size: 18px;
-  font-weight: 600;
-  letter-spacing: 2px;
+  font-size: 16px;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.85);
 }
 
 .header-right {

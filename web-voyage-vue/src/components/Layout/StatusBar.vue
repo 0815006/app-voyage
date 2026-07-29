@@ -60,7 +60,7 @@ onUnmounted(() => {
   font-size: 12px;
   color: #606266;
   grid-row: 3 / 4;
-  grid-column: 1 / 3;
+  grid-column: 2 / 3;
 }
 
 .status-right {
