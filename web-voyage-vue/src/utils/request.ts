@@ -34,7 +34,8 @@ instance.interceptors.request.use(
 instance.interceptors.response.use(
   (response: AxiosResponse) => {
     const body = response.data
-    if (body.code && body.code !== 200) {
+    // 404 由业务页面自行处理（如 Wiki 双链跳转），不弹错误提示
+    if (body.code && body.code !== 200 && body.code !== 404) {
       ElMessage.error(body.message || '请求失败')
       return Promise.reject(new Error(body.message || '请求失败'))
     }

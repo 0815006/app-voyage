@@ -5,7 +5,7 @@
   >
     <Header />
     <Sidebar :collapsed="collapsed" @collapse-change="onCollapseChange" />
-    <main class="main-content">
+    <main class="main-content" :class="{ 'main-content--full-height': isFullHeightRoute }">
       <router-view />
     </main>
     <StatusBar />
@@ -13,12 +13,16 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
+import { useRoute } from 'vue-router'
 import Header from './Header.vue'
 import Sidebar from './Sidebar.vue'
 import StatusBar from './StatusBar.vue'
 
+const route = useRoute()
 const collapsed = ref(false)
+
+const isFullHeightRoute = computed(() => route.path.startsWith('/wiki'))
 
 function onCollapseChange(val: boolean) {
   collapsed.value = val
@@ -42,5 +46,10 @@ function onCollapseChange(val: boolean) {
   overflow-y: auto;
   grid-row: 2 / 3;
   grid-column: 2 / 3;
+}
+
+.main-content--full-height {
+  padding: 0;
+  overflow: hidden;
 }
 </style>

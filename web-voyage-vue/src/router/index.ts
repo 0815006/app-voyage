@@ -37,6 +37,12 @@ const routes: RouteRecordRaw[] = [
         component: () => import('@/views/MetaGen.vue'),
         meta: { title: '元数据生成' },
       },
+      {
+        path: 'wiki',
+        name: 'Wiki',
+        component: () => import('@/views/WikiManager.vue'),
+        meta: { title: 'Wiki在线' },
+      },
     ],
   },
 ]

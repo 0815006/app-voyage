@@ -51,6 +51,10 @@
         <el-icon><Setting /></el-icon>
         <template #title>元数据生成</template>
       </el-menu-item>
+      <el-menu-item index="/wiki">
+        <el-icon><Collection /></el-icon>
+        <template #title>Wiki在线</template>
+      </el-menu-item>
     </el-menu>
   </aside>
 </template>
@@ -58,7 +62,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useRoute } from 'vue-router'
-import { Monitor, Document, Search, TrendCharts, Setting } from '@element-plus/icons-vue'
+import { Monitor, Document, Search, TrendCharts, Setting, Collection } from '@element-plus/icons-vue'
 
 const props = defineProps<{
   collapsed: boolean

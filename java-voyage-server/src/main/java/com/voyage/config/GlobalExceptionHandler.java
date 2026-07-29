@@ -1,6 +1,8 @@
 package com.voyage.config;
 
+import com.voyage.common.BusinessException;
 import com.voyage.common.Result;
+import jakarta.servlet.http.HttpServletResponse;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -13,6 +15,13 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 @Slf4j
 @RestControllerAdvice
 public class GlobalExceptionHandler {
+
+    @ExceptionHandler(BusinessException.class)
+    public Result<Void> handleBusinessException(BusinessException e, HttpServletResponse response) {
+        log.warn("业务异常: code={}, message={}", e.getCode(), e.getMessage());
+        response.setStatus(e.getCode());
+        return Result.fail(e.getCode(), e.getMessage());
+    }
 
     @ExceptionHandler(IllegalArgumentException.class)
     @ResponseStatus(HttpStatus.BAD_REQUEST)
