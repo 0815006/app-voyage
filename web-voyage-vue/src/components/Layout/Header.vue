@@ -1,7 +1,7 @@
 <template>
   <header class="header">
     <div class="header-left">
-      <h1 class="page-title">控制台</h1>
+      <h1 class="page-title">欢迎使用voyage性能平台</h1>
     </div>
     <div class="header-right">
       <!-- 工号 Tag / Input 无缝就地编辑 (Inline Edit) -->
