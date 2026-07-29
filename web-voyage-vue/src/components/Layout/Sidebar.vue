@@ -3,7 +3,7 @@
     <!-- Logo 区域 -->
     <div class="logo-area" :class="{ 'logo-collapsed': collapsed }">
       <div class="logo-content">
-        <span class="logo-icon">⛵</span>
+        <img class="logo-icon" src="/logo.svg" alt="Voyage" />
         <span v-show="!collapsed" class="logo-title">Voyage 性能平台</span>
       </div>
       <!-- 折叠按钮 -->
@@ -114,8 +114,8 @@ function toggleCollapse() {
 }
 
 .logo-icon {
-  font-size: 28px;
-  line-height: 1;
+  width: 32px;
+  height: 32px;
   flex-shrink: 0;
 }
 
