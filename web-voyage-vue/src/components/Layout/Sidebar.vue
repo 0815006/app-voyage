@@ -4,7 +4,7 @@
     <div class="logo-area" :class="{ 'logo-collapsed': collapsed }">
       <div class="logo-content">
         <span class="logo-icon">⛵</span>
-        <span v-show="!collapsed" class="logo-title">Voyage 全栈平台</span>
+        <span v-show="!collapsed" class="logo-title">Voyage 性能平台</span>
       </div>
       <!-- 折叠按钮 -->
       <button class="collapse-toggle" @click="toggleCollapse">
@@ -39,6 +39,18 @@
         <el-icon><Document /></el-icon>
         <template #title>示例页面</template>
       </el-menu-item>
+      <el-menu-item index="/resource-check">
+        <el-icon><Search /></el-icon>
+        <template #title>资源核查报告</template>
+      </el-menu-item>
+      <el-menu-item index="/performance">
+        <el-icon><TrendCharts /></el-icon>
+        <template #title>性能测试</template>
+      </el-menu-item>
+      <el-menu-item index="/meta-gen">
+        <el-icon><Setting /></el-icon>
+        <template #title>元数据生成</template>
+      </el-menu-item>
     </el-menu>
   </aside>
 </template>
@@ -46,7 +58,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useRoute } from 'vue-router'
-import { Monitor, Document } from '@element-plus/icons-vue'
+import { Monitor, Document, Search, TrendCharts, Setting } from '@element-plus/icons-vue'
 
 const props = defineProps<{
   collapsed: boolean

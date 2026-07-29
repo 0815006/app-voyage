@@ -16,6 +16,10 @@ spring:
       minimum-idle: 5
       idle-timeout: 300000
       connection-timeout: 10000
+  servlet:
+    multipart:
+      max-file-size: ${FILE_MAX_SIZE:500MB}
+      max-request-size: ${FILE_MAX_SIZE:500MB}
 
 mybatis-plus:
   configuration:
@@ -27,6 +31,24 @@ mybatis-plus:
       logic-delete-field: deleted
       logic-delete-value: 1
       logic-not-delete-value: 0
+
+# =============================================
+# Voyage 自定义配置
+# =============================================
+app:
+  data-root: ${DATA_ROOT:D:/data/voyage}
+
+performance:
+  template-path: "${app.data-root}/uploads/performance/templates/"
+  doc-path: "${app.data-root}/uploads/performance/docs/"
+
+meta:
+  max-file-lines: 2000
+  storage:
+    preview: "${app.data-root}/meta/preview/"
+    formal: "${app.data-root}/meta/formal/"
+  template-path: "${app.data-root}/meta/templates/"
+  ref-file-path: "${app.data-root}/meta/ref-files/"
 
 logging:
   level:
