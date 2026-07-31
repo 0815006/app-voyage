@@ -512,7 +512,8 @@ async function loadModels() {
   modelLoading.value = true
   try {
     const res = await listModels({ page: 1, size: 200 })
-    models.value = ((res as Record<string, unknown>)?.records as ModelRecord[]) || []
+    const pageData = res as unknown as { records?: ModelRecord[] }
+    models.value = pageData?.records || []
   } finally {
     modelLoading.value = false
   }
@@ -522,7 +523,7 @@ async function handleSelectModel(modelId: number) {
   activeModelId.value = modelId
   detailLoading.value = true
   try {
-    const detail = (await getModelDetail(modelId)) as DetailResponse
+    const detail = (await getModelDetail(String(modelId))) as unknown as DetailResponse
     modelInfo.value = (detail.model || detail) as ModelDetailData
     const fields = (detail.fields || []) as FieldItem[]
     fields.sort((a, b) => (a.sortIndex || 0) - (b.sortIndex || 0))
@@ -549,7 +550,7 @@ function handleManageTemplates() {
 }
 
 function openModelEdit() {
-  modelEditDialogRef.value?.init({ ...modelInfo.value } as ModelDetailData & { id: number })
+  modelEditDialogRef.value?.init({ ...modelInfo.value, modelName: modelInfo.value.modelName || '' } as Parameters<typeof modelEditDialogRef.value.init>[0])
 }
 
 // ─── Field Sections ──────────────────────────────────────────
@@ -597,7 +598,7 @@ function handlePublishConfirm() {
     confirmButtonText: '确定发布',
     type: 'warning',
   }).then(() => {
-    publishModel(activeModelId.value!).then(() => {
+    publishModel(String(activeModelId.value!)).then(() => {
       ElMessage.success('发布成功')
       refreshDetail()
       loadModels()
@@ -611,7 +612,7 @@ function handleUnpublish() {
     type: 'info',
   }).then(() => {
     const data = { ...modelInfo.value, status: 'DRAFT' }
-    updateModel(activeModelId.value!, data).then(() => {
+    updateModel(String(activeModelId.value!), data).then(() => {
       ElMessage.success('已退回草稿')
       refreshDetail()
       loadModels()
@@ -626,7 +627,7 @@ function handleDeleteConfirm() {
     confirmButtonText: '确定删除',
     type: 'warning',
   }).then(() => {
-    deleteModel(activeModelId.value!).then(() => {
+    deleteModel(String(activeModelId.value!)).then(() => {
       ElMessage.success('删除成功')
       activeModelId.value = null
       modelInfo.value = {}
@@ -640,7 +641,7 @@ function handleDeleteConfirm() {
 
 function handlePreview() {
   previewLoading.value = true
-  preview(activeModelId.value!)
+  preview(String(activeModelId.value!))
     .then((res: unknown) => {
       previewText.value = (res as string) || ''
       nextTick(() => syncRulerWidth())
@@ -690,7 +691,7 @@ function doGenerate() {
     return
   }
   genLoading.value = true
-  generate({ modelId: activeModelId.value!, rowCount: genRowCount.value, batchName: genBatchName.value })
+  generate({ modelId: String(activeModelId.value!), rowCount: genRowCount.value, batchName: genBatchName.value })
     .then((res: unknown) => {
       ElMessage.success('生成任务已提交')
       showGenDialog.value = false
@@ -698,7 +699,7 @@ function doGenerate() {
       const taskId = (res as Record<string, unknown>)?.id as number | undefined
       if (taskId) {
         const timer = setInterval(() => {
-          getTaskStatus(taskId).then((r: unknown) => {
+          getTaskStatus(String(taskId)).then((r: unknown) => {
             const record = r as HistoryRecord
             if (record && record.status !== 'RUNNING') {
               clearInterval(timer)
@@ -721,7 +722,7 @@ function doGenerate() {
 function loadHistory() {
   if (!activeModelId.value) return
   historyLoading.value = true
-  getHistory(activeModelId.value).then((res: unknown) => {
+  getHistory(String(activeModelId.value)).then((res: unknown) => {
     historyList.value = (res as HistoryRecord[]) || []
   }).finally(() => { historyLoading.value = false })
 }
@@ -732,7 +733,7 @@ function handleDownload(row: HistoryRecord) {
 
 function handleDeleteFile(row: HistoryRecord) {
   ElMessageBox.confirm('确定删除该文件记录？', '提示', { type: 'warning' }).then(() => {
-    deleteEntityFile(row.id).then(() => {
+    deleteEntityFile(String(row.id)).then(() => {
       ElMessage.success('删除成功')
       loadHistory()
     })
@@ -807,7 +808,7 @@ function submitFtpForm() {
 
 function handleDeleteFtp(row: FtpConfig) {
   ElMessageBox.confirm(`确定删除FTP配置"${row.name}"？`, '提示', { type: 'warning' }).then(() => {
-    deleteFtpConfig(row.id!).then(() => {
+    deleteFtpConfig(String(row.id!)).then(() => {
       ElMessage.success('删除成功')
       loadFtpConfigs()
     })

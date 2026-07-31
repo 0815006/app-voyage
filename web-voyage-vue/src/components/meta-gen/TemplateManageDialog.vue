@@ -66,7 +66,7 @@ async function fetchFileList() {
   loading.value = true
   try {
     const res = await listTemplates()
-    fileList.value = (res as TemplateFile[]) || []
+    fileList.value = (res as unknown as TemplateFile[]) || []
   } finally {
     loading.value = false
   }

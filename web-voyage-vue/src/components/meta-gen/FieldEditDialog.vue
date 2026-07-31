@@ -684,9 +684,9 @@ function init(mId: number, sec: string, fields: FieldItem[], mName: string) {
 
 function normalizeField(f: FieldItem): FieldItem {
   // Compat with legacy field types
-  if ((f as Record<string, unknown>).ruleType === 'RANDOM') f.ruleType = 'RANDOM_NUM'
-  if ((f as Record<string, unknown>).ruleType === 'EXPRESSION') f.ruleType = 'EXPR'
-  if ((f as Record<string, unknown>).ruleType === 'SEQ') f.ruleType = 'SEQUENCE'
+  if ((f as unknown as Record<string, unknown>).ruleType === 'RANDOM') f.ruleType = 'RANDOM_NUM'
+  if ((f as unknown as Record<string, unknown>).ruleType === 'EXPRESSION') f.ruleType = 'EXPR'
+  if ((f as unknown as Record<string, unknown>).ruleType === 'SEQ') f.ruleType = 'SEQUENCE'
 
   // If ruleConfigJson is empty but legacy fields exist, try migration
   if (!f.ruleConfigJson || f.ruleConfigJson === 'null') {
@@ -981,7 +981,7 @@ async function handleSave() {
   }
   loading.value = true
   try {
-    await saveFields(modelId.value!, list.value, section.value)
+    await saveFields(String(modelId.value!), list.value, section.value)
     ElMessage.success('字段保存成功')
     visible.value = false
     emit('refresh')
@@ -1038,8 +1038,8 @@ function handleUploadExcel(fileInfo: UploadFileInfo) {
   const doImport = () => {
     const formData = new FormData()
     formData.append('file', rawFile)
-    parseFieldExcel(formData).then((res: FieldItem[]) => {
-      const parsedFields = res || []
+    parseFieldExcel(formData).then((res) => {
+      const parsedFields = (res as unknown as FieldItem[]) || []
       if (parsedFields.length === 0) {
         ElMessage.warning('Excel 中未解析到有效字段数据')
         return

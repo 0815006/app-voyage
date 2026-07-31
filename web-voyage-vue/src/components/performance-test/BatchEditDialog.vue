@@ -196,6 +196,7 @@ import { Plus, Download, Upload, Delete } from '@element-plus/icons-vue'
 import { saveBatches, getTemplateDownloadByKeywordUrl, parseBatchExcel } from '@/api/performance'
 
 interface BatchItem {
+  [key: string]: unknown
   jobNo?: string
   jobName?: string
   jobCount?: string
@@ -392,7 +393,7 @@ async function handleSave() {
     await saveBatches(taskId.value, {
       batches: list.value,
       summary: { ...summaryData },
-    })
+    } as unknown as BatchItem[])
     ElMessage.success('保存成功')
     emit('refresh')
     visible.value = false

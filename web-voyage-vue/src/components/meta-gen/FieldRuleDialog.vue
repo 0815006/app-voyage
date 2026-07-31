@@ -171,6 +171,7 @@
 import { ref, computed, watch } from 'vue'
 
 interface FieldForm {
+  id?: number
   section: string
   fieldKey: string
   fieldName: string

@@ -139,7 +139,7 @@ async function handleSave() {
       await createModel({ ...form.value })
       ElMessage.success('模型创建成功')
     } else {
-      await updateModel(activeModelId.value!, { ...form.value })
+      await updateModel(String(activeModelId.value!), { ...form.value })
       ElMessage.success('保存成功')
     }
     visible.value = false

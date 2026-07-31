@@ -128,12 +128,12 @@ watch(visible, (v) => {
 const refList = ref<RefFileRecord[]>([])
 const loading = ref(false)
 const mapVisible = ref(false)
-const mapForm = ref<RefFileRecord>({})
+const mapForm = ref<RefFileRecord>({ refName: '', parseType: 'DELIMITER' })
 const fileInputRef = ref<HTMLInputElement | null>(null)
 const previewVisible = ref(false)
 const previewLines = ref<string[]>([])
 const previewLoading = ref(false)
-const previewRow = ref<RefFileRecord>({})
+const previewRow = ref<RefFileRecord>({ refName: '', parseType: 'DELIMITER' })
 
 const columnMappingPlaceholder = computed(() => {
   if (mapForm.value.parseType === 'FIXED') {
@@ -150,7 +150,7 @@ watch(() => mapForm.value.parseType, (newVal, oldVal) => {
 
 function loadData() {
   loading.value = true
-  listRefFiles().then((res: RefFileRecord[]) => { refList.value = res || [] }).finally(() => { loading.value = false })
+  listRefFiles().then((res) => { refList.value = (res as unknown as RefFileRecord[]) || [] }).finally(() => { loading.value = false })
 }
 
 function triggerUpload() {
@@ -203,7 +203,7 @@ function handleDelete(row: RefFileRecord) {
     confirmButtonText: '确定删除',
     cancelButtonText: '取消',
   }).then(() => {
-    deleteRefFile(row.id!).then(() => {
+    deleteRefFile(String(row.id!)).then(() => {
       ElMessage.success('删除成功')
       loadData()
       emit('changed')
@@ -216,8 +216,9 @@ function handlePreview(row: RefFileRecord) {
   previewLoading.value = true
   previewLines.value = []
   previewRow.value = row
-  previewRefFile(row.id!, 5).then((res: string[]) => {
-    previewLines.value = res || []
+  previewRefFile(String(row.id!), 5).then((res) => {
+    const content = (res as string) || ''
+    previewLines.value = content ? content.split('\n') : []
   }).finally(() => {
     previewLoading.value = false
   })

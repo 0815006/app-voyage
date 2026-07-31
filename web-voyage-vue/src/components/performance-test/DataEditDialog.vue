@@ -182,7 +182,7 @@ async function handleUploadExcel(file: { raw: File }) {
     const data = await parseDataExcel(formData)
     if (data) {
       ElMessage.success('解析成功')
-      list.value = data as DataDetail[]
+      list.value = data as unknown as DataDetail[]
     }
   } catch {
     ElMessage.error('解析失败')

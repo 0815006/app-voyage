@@ -158,7 +158,7 @@
 import { ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Delete, RefreshRight, Operation } from '@element-plus/icons-vue'
-import { initScenes, getScenes, getSceneDetails, saveAllScenes } from '@/api/performance'
+import { initScenes, getScenes, getSceneDetails, saveAllScenes, type PerformanceScene } from '@/api/performance'
 
 interface Scene {
   id?: number
@@ -222,8 +222,8 @@ async function fetchData() {
       scenes.value = scenesData as Scene[]
       sceneDetails.value = []
       for (const scene of scenes.value) {
-        const dRes = await getSceneDetails(scene.id!)
-        sceneDetails.value.push((dRes as SceneDetail[]) || [])
+        const dRes = await getSceneDetails(String(scene.id!))
+        sceneDetails.value.push((dRes as unknown as SceneDetail[]) || [])
       }
     }
   } finally {
@@ -333,7 +333,7 @@ async function handleSaveAll() {
       }
     })
     console.log('Saving scenes data:', data)
-    await saveAllScenes(taskId.value, data)
+    await saveAllScenes(taskId.value, data as unknown as PerformanceScene[])
     ElMessage.success('全部保存成功')
     emit('refresh')
     visible.value = false

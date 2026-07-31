@@ -395,7 +395,7 @@ const canEdit = computed<boolean>(() => {
 async function fetchTaskList() {
   loading.value = true
   try {
-    const data = await listTasks()
+    const data = await listTasks({})
     taskList.value = (data as TaskSummary[]) || []
   } catch {
     // error handled by interceptor
@@ -409,7 +409,7 @@ async function handleSelectTask(taskId: string) {
   try {
     const data = await getTaskDetail(taskId)
     if (data) {
-      const detail = data as {
+      const detail = data as unknown as {
         task: TaskInfo
         trans: TranView[]
         batches: BatchView[]
@@ -466,7 +466,7 @@ async function fetchDocList() {
   docLoading.value = true
   try {
     const data = await listDocs()
-    docList.value = (data as DocItem[]) || []
+    docList.value = (data as unknown as DocItem[]) || []
   } catch {
     // error handled by interceptor
   } finally {

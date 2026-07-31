@@ -94,7 +94,7 @@ watch(visible, (v) => {
 const enumList = ref<EnumRecord[]>([])
 const loading = ref(false)
 const innerVisible = ref(false)
-const editForm = ref<EditForm>({})
+const editForm = ref<EditForm>({ enumKey: '', enumName: '' })
 const editItems = ref<EnumItem[]>([])
 
 function parseItems(json: string): EnumItem[] {
@@ -103,11 +103,11 @@ function parseItems(json: string): EnumItem[] {
 
 function loadData() {
   loading.value = true
-  listEnums().then((res: EnumRecord[]) => { enumList.value = res || [] }).finally(() => { loading.value = false })
+  listEnums().then((res) => { enumList.value = (res as unknown as EnumRecord[]) || [] }).finally(() => { loading.value = false })
 }
 
 function handleAdd() {
-  editForm.value = {}
+  editForm.value = { enumKey: '', enumName: '' }
   editItems.value = [
     { val: '0', desc: '男' },
     { val: '1', desc: '女' },
@@ -138,7 +138,7 @@ function handleDelete(row: EnumRecord) {
     confirmButtonText: '确定',
     cancelButtonText: '取消',
   }).then(() => {
-    deleteEnum(row.id!).then(() => {
+    deleteEnum(String(row.id!)).then(() => {
       ElMessage.success('删除成功')
       loadData()
       emit('changed')

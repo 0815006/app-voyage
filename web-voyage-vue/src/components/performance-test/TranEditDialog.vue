@@ -258,7 +258,7 @@
 import { ref, reactive } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Plus, Download, Upload, Delete } from '@element-plus/icons-vue'
-import { saveTrans, getTemplateDownloadByKeywordUrl, parseTranExcel } from '@/api/performance'
+import { saveTrans, getTemplateDownloadByKeywordUrl, parseTranExcel, type TransItem } from '@/api/performance'
 
 interface TranItem {
   id?: number
@@ -460,7 +460,7 @@ async function handleSave() {
     await saveTrans(taskId.value, {
       trans: list.value,
       summary: { ...summaryData },
-    })
+    } as unknown as TransItem[])
     ElMessage.success('保存成功')
     emit('refresh')
     visible.value = false

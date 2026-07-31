@@ -54,7 +54,7 @@ function init() {
 
 async function fetchFileList() {
   const data = await listTemplates()
-  fileList.value = data as TemplateFile[]
+  fileList.value = data as unknown as TemplateFile[]
 }
 
 function handleUploadSuccess() {
