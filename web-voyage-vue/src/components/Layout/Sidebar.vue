@@ -37,11 +37,15 @@
       </el-menu-item>
       <el-menu-item index="/demo">
         <el-icon><Document /></el-icon>
-        <template #title>示例页面</template>
+        <template #title>规划功能</template>
+      </el-menu-item>
+      <el-menu-item index="/wiki">
+        <el-icon><Collection /></el-icon>
+        <template #title>Wiki在线</template>
       </el-menu-item>
       <el-menu-item index="/resource-check">
         <el-icon><Search /></el-icon>
-        <template #title>资源核查报告</template>
+        <template #title>资源核查</template>
       </el-menu-item>
       <el-menu-item index="/performance">
         <el-icon><TrendCharts /></el-icon>
@@ -49,12 +53,9 @@
       </el-menu-item>
       <el-menu-item index="/meta-gen">
         <el-icon><Setting /></el-icon>
-        <template #title>元数据生成</template>
+        <template #title>批量造数</template>
       </el-menu-item>
-      <el-menu-item index="/wiki">
-        <el-icon><Collection /></el-icon>
-        <template #title>Wiki在线</template>
-      </el-menu-item>
+
     </el-menu>
   </aside>
 </template>
