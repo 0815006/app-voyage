@@ -39,6 +39,10 @@
         <el-icon><Document /></el-icon>
         <template #title>规划功能</template>
       </el-menu-item>
+      <el-menu-item index="/ai-demo">
+        <el-icon><ChatDotRound /></el-icon>
+        <template #title>AI 助手</template>
+      </el-menu-item>
       <el-menu-item index="/wiki">
         <el-icon><Collection /></el-icon>
         <template #title>Wiki在线</template>
@@ -63,7 +67,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useRoute } from 'vue-router'
-import { Monitor, Document, Search, TrendCharts, Setting, Collection } from '@element-plus/icons-vue'
+import { Monitor, Document, Search, TrendCharts, Setting, Collection, ChatDotRound } from '@element-plus/icons-vue'
 
 const props = defineProps<{
   collapsed: boolean

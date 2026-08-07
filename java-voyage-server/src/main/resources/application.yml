@@ -50,6 +50,17 @@ meta:
   template-path: "${app.data-root}/meta/templates/"
   ref-file-path: "${app.data-root}/meta/ref-files/"
 
+# =============================================
+# AI 大模型配置（ai-client-sdk 自动装配）
+# =============================================
+ai:
+  sdk:
+    api-keys:
+      - ${AI_API_KEY:sk-xxxxxxxxxx}
+    model: ${AI_MODEL:deepseek-v4-pro}
+    timeout: 60s
+    max-retries: 3
+
 logging:
   level:
     com.voyage: debug

@@ -38,6 +38,12 @@ const routes: RouteRecordRaw[] = [
         meta: { title: '元数据生成' },
       },
       {
+        path: 'ai-demo',
+        name: 'AiDemo',
+        component: () => import('@/views/AiDemo.vue'),
+        meta: { title: 'AI 助手' },
+      },
+      {
         path: 'wiki',
         name: 'Wiki',
         component: () => import('@/views/WikiManager.vue'),
