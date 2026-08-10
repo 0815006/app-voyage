@@ -56,7 +56,7 @@ meta:
 ai:
   sdk:
     api-keys:
-      - ${AI_API_KEY:sk-xxxxxxxxxx}
+      - ${AI_API_KEY:sk-f22758bc4fb94519bffb74c7422a38ec}
     model: ${AI_MODEL:deepseek-v4-pro}
     timeout: 60s
     max-retries: 3

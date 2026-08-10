@@ -44,6 +44,12 @@ const routes: RouteRecordRaw[] = [
         meta: { title: 'AI 助手' },
       },
       {
+        path: 'agent-demo',
+        name: 'AgentDemo',
+        component: () => import('@/views/AgentDemo.vue'),
+        meta: { title: 'Agent 验证' },
+      },
+      {
         path: 'wiki',
         name: 'Wiki',
         component: () => import('@/views/WikiManager.vue'),
