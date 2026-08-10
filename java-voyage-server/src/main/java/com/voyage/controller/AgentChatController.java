@@ -221,7 +221,26 @@ public class AgentChatController {
 
     private void sendSseData(SseEmitter emitter, String eventName, String text) {
         try {
+            // SSE 协议：多行数据每行必须以 "data: " 开头
+            // Spring SseEmitter 会自动处理 \n 拆分，此处直接发送即可
             emitter.send(SseEmitter.event().name(eventName).data(text));
+        } catch (IOException e) {
+            log.debug("SSE 发送失败 (客户端可能已断开): {}", e.getMessage());
+        }
+    }
+
+    /**
+     * 发送多行文本块（SSE data 字段），确保 \n 被正确拆分为多条 data: 行。
+     */
+    private void sendSseMultilineData(SseEmitter emitter, String eventName, String text) {
+        try {
+            StringBuilder sb = new StringBuilder();
+            for (String line : text.split("\n", -1)) {
+                sb.append("data:").append(line).append("\n");
+            }
+            // 直接用 SseEmitter 的原始格式化：追加 event name + 结尾空行
+            String frame = "event:" + eventName + "\n" + sb.toString() + "\n";
+            emitter.send(frame);
         } catch (IOException e) {
             log.debug("SSE 发送失败 (客户端可能已断开): {}", e.getMessage());
         }

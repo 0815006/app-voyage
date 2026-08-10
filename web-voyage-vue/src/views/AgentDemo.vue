@@ -356,6 +356,8 @@ function processSseFrame(frame: string, msgIndex: number) {
   for (const line of lines) {
     if (line.startsWith('event: ')) {
       eventType = line.slice(7).trim()
+    } else if (line.startsWith('event:')) {
+      eventType = line.slice(6).trim()
     } else if (line.startsWith('data: ')) {
       dataLines.push(line.slice(6))
     } else if (line.startsWith('data:')) {
@@ -408,6 +410,10 @@ function processSseFrame(frame: string, msgIndex: number) {
           type: 'step_start',
           data: { step: `完成 — ${complete.totalSteps} 步, ${complete.totalTokens} tokens` },
         })
+        // 回退：如果 text_chunk 跨帧丢失，从 complete 事件提取 finalText
+        if (!msg.content && complete.finalText) {
+          msg.content = complete.finalText
+        }
       } catch { /* ignore */ }
       break
   }
