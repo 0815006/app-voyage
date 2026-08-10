@@ -351,17 +351,18 @@ function processSseFrame(frame: string, msgIndex: number) {
 
   const lines = frame.split('\n')
   let eventType = ''
-  let data = ''
+  const dataLines: string[] = []
 
   for (const line of lines) {
     if (line.startsWith('event: ')) {
       eventType = line.slice(7).trim()
     } else if (line.startsWith('data: ')) {
-      data = line.slice(6)
+      dataLines.push(line.slice(6))
     } else if (line.startsWith('data:')) {
-      data = line.slice(5)
+      dataLines.push(line.slice(5))
     }
   }
+  const data = dataLines.join('\n')
 
   if (!eventType || !data) return
 
@@ -481,7 +482,10 @@ function scrollToBottom() {
 .chat-area {
   flex: 1;
   overflow-y: auto;
-  padding: 12px 0;
+  padding: 16px;
+  border: 1px solid #ebeef5;
+  border-radius: 8px;
+  background: #fff;
   display: flex;
   flex-direction: column;
   gap: 16px;

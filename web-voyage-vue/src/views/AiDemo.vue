@@ -1,5 +1,14 @@
 <template>
   <div class="ai-demo">
+    <!-- ====== 标题栏 ====== -->
+    <div class="demo-header">
+      <div class="header-left">
+        <h2 class="header-title">🤖 AI 对话</h2>
+        <span class="header-sub">底座：ai-client-sdk</span>
+      </div>
+      <el-button size="small" text @click="clearMessages">清空对话</el-button>
+    </div>
+
     <!-- 聊天消息区域 -->
     <div ref="chatContainer" class="chat-messages">
       <div v-if="messages.length === 0" class="chat-empty">
@@ -30,23 +39,14 @@
       </div>
     </div>
 
-    <!-- 输入区域 -->
+    <!-- ====== 输入区域 ====== -->
     <div class="chat-input-area">
-      <div class="input-actions">
-        <el-button
-          :disabled="loading"
-          @click="clearMessages"
-          size="small"
-        >
-          清空对话
-        </el-button>
-      </div>
       <div class="input-row">
         <el-input
           v-model="inputText"
           type="textarea"
-          :rows="3"
-          placeholder="输入你的提示词，按 Ctrl+Enter 发送"
+          :rows="2"
+          placeholder="输入提示词，Ctrl+Enter 发送..."
           resize="none"
           :disabled="loading"
           @keydown.ctrl.enter="sendMessage"
@@ -176,15 +176,28 @@ function scrollToBottom() {
 </script>
 
 <style scoped>
+/* ========== 整体布局 ========== */
 .ai-demo {
   display: flex;
   flex-direction: column;
   height: calc(100vh - 160px);
-  max-width: 900px;
+  max-width: 960px;
   margin: 0 auto;
   padding: 16px;
-  gap: 16px;
+  gap: 12px;
 }
+
+/* ========== 标题 ========== */
+.demo-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #ebeef5;
+}
+.header-left { display: flex; align-items: baseline; gap: 12px; }
+.header-title { margin: 0; font-size: 18px; color: #303133; }
+.header-sub { font-size: 12px; color: #909399; }
 
 /* ---- 消息列表 ---- */
 .chat-messages {
@@ -193,7 +206,7 @@ function scrollToBottom() {
   padding: 16px;
   border: 1px solid #ebeef5;
   border-radius: 8px;
-  background: #fafafa;
+  background: #fff;
 }
 
 .chat-empty {
@@ -274,15 +287,8 @@ function scrollToBottom() {
 
 /* ---- 输入区域 ---- */
 .chat-input-area {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.input-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
+  padding-top: 8px;
+  border-top: 1px solid #ebeef5;
 }
 
 .input-row {
@@ -296,8 +302,9 @@ function scrollToBottom() {
 }
 
 .send-btn {
-  width: 80px;
-  font-size: 15px;
+  width: 72px;
+  font-size: 14px;
   height: auto;
+  border-radius: 6px;
 }
 </style>
