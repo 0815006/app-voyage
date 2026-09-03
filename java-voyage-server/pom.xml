@@ -91,6 +91,11 @@
             <artifactId>ai-agent-sdk</artifactId>
             <version>1.0.0-SNAPSHOT</version>
         </dependency>
+        <dependency>
+            <groupId>com.realapex</groupId>
+            <artifactId>ai-tool-db</artifactId>
+            <version>1.0.0-SNAPSHOT</version>
+        </dependency>
 
         <!-- Apache Commons Net (FTP 客户端，造数引擎依赖) -->
         <dependency>

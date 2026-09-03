@@ -63,6 +63,10 @@
         <el-icon><Setting /></el-icon>
         <template #title>批量造数</template>
       </el-menu-item>
+      <el-menu-item index="/db-analysis">
+        <el-icon><DataAnalysis /></el-icon>
+        <template #title>数据库性能分析</template>
+      </el-menu-item>
 
     </el-menu>
   </aside>
@@ -71,7 +75,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useRoute } from 'vue-router'
-import { Monitor, Document, Search, TrendCharts, Setting, Collection, ChatDotRound, Cpu } from '@element-plus/icons-vue'
+import { Monitor, Document, Search, TrendCharts, Setting, Collection, ChatDotRound, Cpu, DataAnalysis } from '@element-plus/icons-vue'
 
 const props = defineProps<{
   collapsed: boolean

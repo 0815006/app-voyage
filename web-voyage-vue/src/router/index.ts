@@ -55,6 +55,12 @@ const routes: RouteRecordRaw[] = [
         component: () => import('@/views/WikiManager.vue'),
         meta: { title: 'Wiki在线' },
       },
+      {
+        path: 'db-analysis',
+        name: 'DbAnalysis',
+        component: () => import('@/views/DbAnalysis.vue'),
+        meta: { title: '数据库性能分析' },
+      },
     ],
   },
 ]
