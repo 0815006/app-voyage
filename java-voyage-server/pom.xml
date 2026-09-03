@@ -36,11 +36,21 @@
             <version>${mybatis-plus.version}</version>
         </dependency>
 
-        <!-- MySQL Driver -->
+        <!-- PostgreSQL Driver -->
         <dependency>
-            <groupId>com.mysql</groupId>
-            <artifactId>mysql-connector-j</artifactId>
+            <groupId>org.postgresql</groupId>
+            <artifactId>postgresql</artifactId>
             <scope>runtime</scope>
+        </dependency>
+
+        <!-- Flyway (数据库版本管理) -->
+        <dependency>
+            <groupId>org.flywaydb</groupId>
+            <artifactId>flyway-core</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.flywaydb</groupId>
+            <artifactId>flyway-database-postgresql</artifactId>
         </dependency>
 
         <!-- Lombok -->
@@ -98,6 +108,20 @@
     </dependencies>
 
     <build>
+        <resources>
+            <!-- 默认资源目录 -->
+            <resource>
+                <directory>src/main/resources</directory>
+            </resource>
+            <!-- 将项目根目录 sql/ 下的 Flyway 迁移脚本复制到 classpath:db/migration -->
+            <resource>
+                <directory>../sql</directory>
+                <targetPath>db/migration</targetPath>
+                <includes>
+                    <include>V*.sql</include>
+                </includes>
+            </resource>
+        </resources>
         <plugins>
             <plugin>
                 <groupId>org.springframework.boot</groupId>

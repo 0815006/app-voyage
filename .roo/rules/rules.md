@@ -4,7 +4,8 @@
 当前工作区是一个基于 **Java 21 (虚拟线程)** 和 **Vue 3 (Vite 6)** 的全栈项目。
 - **后端目录**：`java-voyage-server` (Spring Boot 3.4+, Maven, Java 21)
 - **前端目录**：`web-voyage-vue` (Vue 3.5+, Vite 6, TypeScript, Element Plus)
-- **数据库**：`voyage_db` (MySQL 8.4 LTS)
+- **数据库**：`voyage_db` (PostgreSQL 16+，启用 **pgvector** 扩展支持 AI 向量检索)
+- **AI Workbench SDK 目录**：`D:\ProjectDir\ai-workbench`（本地独立 SDK 工程，非本工作区，由后端 pom 引用）
 
 ---
 
@@ -25,8 +26,8 @@
 ### 2.4 持久层与数据库
 * **ORM 框架**：使用 **MyBatis Plus 3.5.x**，优先使用 `LambdaQueryWrapper`。
 * **主键规范**：对于核心业务表，主键必须使用 String 类型（VARCHAR(32)），对应 MyBatis-Plus 的雪花 ID（`@TableId(type = IdType.ASSIGN_ID)`）。
-* **版本管理**：所有数据库变更脚本统一存放在项目根目录 [`sql/`](sql/) 下，按版本命名（如 `V1.0__init.sql`），由开发者**手工**在 MySQL 中执行。**禁止**依赖 Flyway 等自动迁移工具。
-* **SQL 规范**：MySQL 8.4 语法，`ENGINE=InnoDB`，字符集 `utf8mb4`，字段必须带 `COMMENT`。
+* **版本管理**：使用 **Flyway** 自动管理数据库变更，迁移脚本统一存放在项目根目录 [`sql/`](sql/) 下，按版本命名（如 `V1.0__init.sql`），由 Flyway 在应用启动时**自动执行**。**禁止**手工执行 SQL 脚本，也**禁止**依赖其他自动迁移工具。
+* **SQL 规范**：PostgreSQL 16+ 语法，字符集 UTF-8（数据库默认），字段必须通过 `COMMENT ON COLUMN` 语句补充注释；AI 向量检索场景使用 **pgvector** 扩展（迁移脚本开头执行 `CREATE EXTENSION IF NOT EXISTS vector;`），向量字段类型为 `vector(n)`。
 
 ### 2.5 响应与异常
 * **统一响应**：所有 Controller 返回泛型类 `Result<T>`：`{ "code": 200, "message": "success", "data": { ... } }`。
@@ -43,9 +44,9 @@
   ```yaml
   spring:
     datasource:
-      url: ${DB_URL:jdbc:mysql://localhost:3306/voyage_db}
-      username: ${DB_USER:root}
-      password: ${DB_PASS:root}
+      url: ${DB_URL:jdbc:postgresql://localhost:5432/voyage_db}
+      username: ${DB_USER:postgres}
+      password: ${DB_PASS:postgres}
   ```
 * **敏感信息**：密码、密钥等敏感配置一律通过环境变量注入，`application.yml` 中仅保留占位符及本地开发用默认值。**禁止**在 YAML 文件中硬编码生产环境密码。
 * **端口**：后端默认端口 `8098`，通过 `${SERVER_PORT:8098}` 占位。前端 Vite 开发服务器端口 `8088`。
@@ -102,5 +103,15 @@ AI 在处理、重构或引用系统级主架构时，必须严格保持以下�
 ---
 
 ## 5. 专属提示
-* **生成 SQL**：核心时间审计字段命名为 `create_time` 和 `update_time`，且默认为 `CURRENT_TIMESTAMP`。核心业务表主键设计为 `VARCHAR(32)`。
+* **生成 SQL**：核心时间审计字段命名为 `create_time` 和 `update_time`，且默认为 `CURRENT_TIMESTAMP`。核心业务表主键设计为 `VARCHAR(32)`。涉及 AI 向量检索的表，迁移脚本开头必须执行 `CREATE EXTENSION IF NOT EXISTS vector;`，向量字段使用 `vector(n)` 类型。
 * **输出页面**：给出完整的 `.vue` 文件（Template, Script setup TS, Style scoped）。
+
+---
+
+## 6. AI Workbench SDK 引用与修改原则
+* **SDK 工程位置**：`D:\ProjectDir\ai-workbench`（本地独立工程，首次在当前项目试水，后续将作为独立组件推广到其他项目）。
+* **后端引用方式**：后端 [`pom.xml`](java-voyage-server/pom.xml) 通过 Maven 依赖引用本地安装的 SDK：
+  * `com.realapex:ai-client-sdk:1.0.0-SNAPSHOT`（AI 客户端 SDK）
+  * `com.realapex:ai-agent-sdk:1.0.0-SNAPSHOT`（AI Agent SDK）
+* **边界清晰原则**：SDK 与后端工程职责边界必须清晰，公共功能一律抽离到 SDK 中，后端工程只负责业务编排与集成。
+* **修改原则**：开发后端过程中，凡是发现涉及 SDK 的问题（缺陷、能力缺失、公共功能需要调整等），**必须前往 `D:\ProjectDir\ai-workbench` 中修改 SDK 源码**，**禁止**绕道在后端工程中打补丁或复制实现。修改后需在 SDK 工程中执行 `mvn install` 重新安装到本地 Maven 仓库，后端重新编译后生效。

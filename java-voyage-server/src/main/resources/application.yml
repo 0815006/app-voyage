@@ -7,15 +7,25 @@ spring:
     virtual:
       enabled: true
   datasource:
-    url: ${DB_URL:jdbc:mysql://localhost:3306/voyage_db?useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true}
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/voyage_db}
     username: ${DB_USER:root}
     password: ${DB_PASS:root}
-    driver-class-name: com.mysql.cj.jdbc.Driver
+    driver-class-name: org.postgresql.Driver
     hikari:
       maximum-pool-size: 20
       minimum-idle: 5
       idle-timeout: 300000
       connection-timeout: 10000
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    baseline-on-migrate: true
+    baseline-version: 0
+    validate-on-migrate: true
+    encoding: UTF-8
+    create-schemas: true
+    default-schema: public
+    table: flyway_schema_history
   servlet:
     multipart:
       max-file-size: ${FILE_MAX_SIZE:500MB}
@@ -56,7 +66,7 @@ meta:
 ai:
   sdk:
     api-keys:
-      - ${AI_API_KEY:sk-xxxxxxx}
+      - ${AI_API_KEY:sk-b4ed658d6bd7484eb514df6cb40e09a3}
     model: ${AI_MODEL:deepseek-v4-pro}
     timeout: 60s
     max-retries: 3
