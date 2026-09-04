@@ -2,7 +2,7 @@
   <el-dialog
     :model-value="visible"
     width="600px"
-    :title="editingAlias ? '编辑数据库连接' : '数据库连接管理'"
+    :title="isEditingExisting ? '编辑数据库连接' : editingAlias === '__new__' ? '新建数据库连接' : '数据库连接管理'"
     @update:model-value="onVisibleChange"
     @open="openHandler"
     @closed="closedHandler"
@@ -13,7 +13,7 @@
         <el-empty v-if="connections.length === 0" description="尚未维护任何数据库连接" :image-size="64" />
         <div
           v-for="conn in connections"
-          :key="conn.alias"
+          :key="conn.id || conn.alias"
           class="conn-item"
         >
           <div class="conn-info">
@@ -30,6 +30,13 @@
               :loading="testingAlias === conn.alias"
               @click="handleTestConnection(conn)"
             >测试连接</el-button>
+            <el-button
+              link
+              type="danger"
+              size="small"
+              :loading="deletingAlias === conn.alias"
+              @click="handleDeleteFromList(conn)"
+            >删除</el-button>
           </div>
         </div>
       </div>
@@ -47,6 +54,7 @@
             <el-option label="MySQL" value="MYSQL" />
             <el-option label="TDSQL" value="TDSQL" />
             <el-option label="GaussDB" value="GAUSSDB" />
+            <el-option label="PostgreSQL" value="POSTGRESQL" />
           </el-select>
         </el-form-item>
 
@@ -55,7 +63,13 @@
         </el-form-item>
 
         <el-form-item label="端口" required>
-          <el-input-number v-model="form.port" :min="1" :max="65535" style="width: 100%" />
+          <el-input-number
+            v-model="form.port"
+            :min="1"
+            :max="65535"
+            :step="100"
+            style="width: 100%"
+          />
         </el-form-item>
 
         <el-form-item label="数据库名" required>
@@ -66,8 +80,13 @@
           <el-input v-model="form.user" placeholder="只读账号更安全" />
         </el-form-item>
 
-        <el-form-item label="密码" required>
-          <el-input v-model="form.password" type="password" show-password placeholder="仅存前端内存，不入库" />
+        <el-form-item label="密码" :required="!isEditingExisting">
+          <el-input
+            v-model="form.password"
+            type="password"
+            show-password
+            :placeholder="isEditingExisting ? '不修改请留空，后端保留原密文' : '将加密存储于服务端'"
+          />
         </el-form-item>
       </el-form>
     </div>
@@ -83,6 +102,7 @@
           type="danger"
           plain
           :disabled="!isEditingExisting"
+          :loading="saving"
           @click="handleDelete"
         >删除</el-button>
         <el-button
@@ -91,8 +111,8 @@
           :loading="testingAlias === '__current__'"
           @click="handleTestConnection(form)"
         >测试连接</el-button>
-        <el-button @click="cancelEdit">取消</el-button>
-        <el-button type="primary" @click="handleSave">保存</el-button>
+        <el-button :disabled="saving" @click="cancelEdit">取消</el-button>
+        <el-button type="primary" :loading="saving" @click="handleSave">保存</el-button>
       </template>
     </template>
   </el-dialog>
@@ -100,9 +120,9 @@
 
 <script setup lang="ts">
 import { reactive, ref, computed } from 'vue'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import type { DbConnectionConfig } from '@/api/db-analysis'
-import { testConnection } from '@/api/db-analysis'
+import { testConnection, saveConnection, deleteConnection } from '@/api/db-analysis'
 
 const props = defineProps<{
   visible: boolean
@@ -111,19 +131,24 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   (e: 'update:visible', value: boolean): void
-  (e: 'save', config: DbConnectionConfig): void
-  (e: 'delete', alias: string): void
+  (e: 'changed'): void
 }>()
 
-// 当前处于编辑模式的别名；空字符串表示列表模式
+// 当前处于编辑模式的标记：'' = 列表模式；'__new__' = 新建；其他为编辑中的连接别名
 const editingAlias = ref<string>('')
 const isEditingExisting = computed(() =>
   props.connections.some(c => c.alias === editingAlias.value)
 )
 
+// 编辑中的原连接（用于识别 id / 判断是否改密），无则视为新建
+const editingOrigin = ref<DbConnectionConfig | null>(null)
+
+const saving = ref(false)
 const testingAlias = ref<string>('')
+const deletingAlias = ref<string>('')
 
 const emptyForm = (): DbConnectionConfig => ({
+  id: undefined,
   alias: '',
   dialect: 'MYSQL',
   host: '',
@@ -141,47 +166,94 @@ function onVisibleChange(val: boolean) {
 
 function openHandler() {
   editingAlias.value = ''
+  editingOrigin.value = null
   Object.assign(form, emptyForm())
 }
 
 function closedHandler() {
   editingAlias.value = ''
+  editingOrigin.value = null
   testingAlias.value = ''
+  deletingAlias.value = ''
+  saving.value = false
 }
 
 function startEdit(conn?: DbConnectionConfig) {
   if (conn) {
     editingAlias.value = conn.alias
-    Object.assign(form, { ...conn })
+    editingOrigin.value = { ...conn }
+    // 列表中的连接不含密码（脱敏），编辑时置空让用户决定是否改密
+    Object.assign(form, { ...conn, password: '' })
   } else {
     editingAlias.value = '__new__'
+    editingOrigin.value = null
     Object.assign(form, emptyForm())
   }
 }
 
 function cancelEdit() {
   editingAlias.value = ''
+  editingOrigin.value = null
   Object.assign(form, emptyForm())
 }
 
 function validateForm(): boolean {
-  if (!form.alias || !form.host || !form.dbName || !form.user || !form.password) {
-    ElMessage.warning('请完整填写连接信息（尤其是临时密码）')
+  if (!form.alias.trim()) {
+    ElMessage.warning('请填写连接别名')
+    return false
+  }
+  if (!form.host.trim()) {
+    ElMessage.warning('请填写主机地址')
+    return false
+  }
+  if (!form.dbName.trim()) {
+    ElMessage.warning('请填写数据库名')
+    return false
+  }
+  if (!form.user.trim()) {
+    ElMessage.warning('请填写用户名')
+    return false
+  }
+  if (!isEditingExisting.value && !form.password) {
+    ElMessage.warning('新建连接必须填写密码（加密存储于服务端）')
     return false
   }
   return true
 }
 
+/**
+ * 从连接对象提取提交给后端的白名单字段。
+ * 忽略 createTime/updateTime/empNo 等只读与审计字段，避免意外回写。
+ */
+function toPayload(src: DbConnectionConfig): DbConnectionConfig {
+  return {
+    id: src.id,
+    alias: src.alias,
+    dialect: src.dialect,
+    host: src.host,
+    port: src.port,
+    dbName: src.dbName,
+    user: src.user,
+    password: src.password || '',
+  }
+}
+
+/** 取「编辑中的表单字段」，叠加原连接兜底（保存 id 与未改字段）。 */
+function formSource(): DbConnectionConfig {
+  return { ...(editingOrigin.value || emptyForm()), ...form }
+}
+
 async function handleTestConnection(config: DbConnectionConfig) {
-  // 表单模式下点击“测试连接”：先校验必填字段，且使用当前表单内容
   const fromForm = editingAlias.value !== ''
   if (fromForm) {
     if (!validateForm()) return
   }
-  const mark = config.alias || '__current__'
+  const mark = (fromForm ? form.alias : config.alias) || '__current__'
   testingAlias.value = mark
   try {
-    const result = await testConnection({ ...config })
+    // 表单模式：表单覆盖原连接字段（密码留空时后端按 id 自动解密原密码）
+    const source = fromForm ? formSource() : config
+    const result = await testConnection(toPayload(source))
     if (result.success) {
       ElMessage.success(`连接可用：${result.alias}`)
     } else {
@@ -194,18 +266,62 @@ async function handleTestConnection(config: DbConnectionConfig) {
   }
 }
 
-function handleSave() {
+async function handleSave() {
   if (!validateForm()) return
-  emit('save', { ...form })
-  // 保存成功后回到列表模式
-  cancelEdit()
+  saving.value = true
+  try {
+    await saveConnection(toPayload(formSource()))
+    ElMessage.success(editingOrigin.value?.id ? '连接已更新' : '连接已保存')
+    emit('changed')
+    cancelEdit()
+  } catch {
+    // 异常已由拦截器提示
+  } finally {
+    saving.value = false
+  }
 }
 
+async function confirmDelete(id: string, alias: string): Promise<boolean> {
+  try {
+    await ElMessageBox.confirm(`确定删除连接【${alias}】？`, '提示', { type: 'warning' })
+    return true
+  } catch {
+    return false
+  }
+}
+
+/** 列表模式：直接删除 */
+async function handleDeleteFromList(conn: DbConnectionConfig) {
+  if (!conn.id) return
+  if (!(await confirmDelete(conn.id, conn.alias))) return
+  deletingAlias.value = conn.alias
+  try {
+    await deleteConnection(conn.id)
+    ElMessage.success(`已删除连接【${conn.alias}】`)
+    emit('changed')
+  } catch {
+    // 异常已由拦截器提示
+  } finally {
+    deletingAlias.value = ''
+  }
+}
+
+/** 编辑模式：删除当前编辑的连接 */
 async function handleDelete() {
-  const alias = editingAlias.value
-  if (!isEditingExisting.value) return
-  emit('delete', alias)
-  cancelEdit()
+  const origin = editingOrigin.value
+  if (!origin?.id || !isEditingExisting.value) return
+  if (!(await confirmDelete(origin.id, origin.alias))) return
+  saving.value = true
+  try {
+    await deleteConnection(origin.id)
+    ElMessage.success(`已删除连接【${origin.alias}】`)
+    emit('changed')
+    cancelEdit()
+  } catch {
+    // 异常已由拦截器提示
+  } finally {
+    saving.value = false
+  }
 }
 
 function dialectLabel(dialect: string): string {
@@ -213,6 +329,7 @@ function dialectLabel(dialect: string): string {
     MYSQL: 'MySQL',
     TDSQL: 'TDSQL',
     GAUSSDB: 'GaussDB',
+    POSTGRESQL: 'PostgreSQL',
   }
   return map[dialect] || dialect
 }

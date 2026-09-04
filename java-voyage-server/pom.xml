@@ -43,6 +43,13 @@
             <scope>runtime</scope>
         </dependency>
 
+        <!-- MySQL Driver（数据库性能分析模块动态探查 MySQL/TDSQL 目标库所需） -->
+        <dependency>
+            <groupId>com.mysql</groupId>
+            <artifactId>mysql-connector-j</artifactId>
+            <scope>runtime</scope>
+        </dependency>
+
         <!-- Flyway (数据库版本管理) -->
         <dependency>
             <groupId>org.flywaydb</groupId>

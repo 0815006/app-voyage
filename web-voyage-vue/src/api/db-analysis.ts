@@ -3,12 +3,14 @@ import { getCurrentEmpNo } from '@/utils/currentUser'
 
 /**
  * 数据库性能分析 API。
- * 依据 PRD「零密码落盘」：密码仅存在于前端内存/本地，随分析请求透传后端，
- * 会话持久化仅保存不含密码的元数据快照。
+ * 数据库连接采用「落表管理」：连接配置保存于后端 db_connection_config 表（按操作员工号隔离），
+ * 密码以 AES-256-GCM 加密存储，列表/会话仅返回不含密码的脱敏数据；
+ * 发起分析/测试连接时携带连接 id，由后端自动解密出明文密码（仅存于请求内存）。
  */
 
-/** 选中的数据库连接配置（含临时密码，仅前端内存持有） */
+/** 数据库连接配置（已保存连接 id 非空且 password 为空，由后端按 id 自动解密） */
 export interface DbConnectionConfig {
+  id?: string
   alias: string
   dialect: string
   host: string
@@ -49,6 +51,26 @@ export function deleteSession(id: string): Promise<void> {
   return request.delete(`/db-analysis/session/${id}`)
 }
 
+/* ==================== 数据库连接落表管理 ==================== */
+
+/** 连接列表：返回当前操作者已保存连接（不含密码） */
+export function listConnections(): Promise<DbConnectionConfig[]> {
+  return request.get('/db-analysis/connections')
+}
+
+/**
+ * 新增或更新连接。
+ * 新增时 password 必填；编辑时 password 留空表示不修改密码（后端保留原密文）。
+ */
+export function saveConnection(config: DbConnectionConfig): Promise<DbConnectionConfig> {
+  return request.post('/db-analysis/connection', config)
+}
+
+/** 删除连接（仅限归属当前操作者） */
+export function deleteConnection(id: string): Promise<void> {
+  return request.delete(`/db-analysis/connection/${id}`)
+}
+
 /** 测试连接响应 */
 export interface TestConnectionResult {
   success: boolean
@@ -57,7 +79,8 @@ export interface TestConnectionResult {
 }
 
 /**
- * 测试单个数据库连接是否可用（供连接管理弹窗"测试连接"按钮使用）。
+ * 测试单个数据库连接是否可用。
+ * 携带 id（已保存连接）时后端自动解密；临时改配未保存时请连同 password 一起传入。
  */
 export function testConnection(config: DbConnectionConfig): Promise<TestConnectionResult> {
   return request.post('/db-analysis/test-connection', config)
