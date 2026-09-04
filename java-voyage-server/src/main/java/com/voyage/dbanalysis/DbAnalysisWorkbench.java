@@ -1,5 +1,6 @@
 package com.voyage.dbanalysis;
 
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.realapex.agent.event.AgentEventListener;
 import com.realapex.agent.exception.AgentSuspendedException;
@@ -19,9 +20,11 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 
@@ -72,30 +75,49 @@ public class DbAnalysisWorkbench {
         SseEmitter emitter = new SseEmitter(1_800_000L); // 30 分钟长连接
         emitterRef.set(emitter);
 
+        // 连接生命周期标志：normal complete / 客户端断开 / 超时 / 发送失败 后置 true。
+        // 置 true 后不再向已结束的 SSE 连接写入事件（后台 Agent 仍会跑完以完成会话持久化），
+        // 避免客户端断开后模型持续流式输出导致的 "ResponseBodyEmitter has already completed" 日志刷屏。
+        AtomicBoolean emitterClosed = new AtomicBoolean(false);
+        emitter.onCompletion(() -> emitterClosed.set(true));
+        emitter.onTimeout(() -> emitterClosed.set(true));
+        emitter.onError(e -> emitterClosed.set(true));
+
         Thread.startVirtualThread(() -> {
             SessionBoundDbManager manager = new SessionBoundDbManager();
             ActiveRunContext context = new ActiveRunContext();
             context.emitterRef = emitterRef;
+            context.emitterClosed = emitterClosed;
             context.manager = manager;
             context.sessionId = sessionId;
             try {
-                // 1. 仅注册前端勾选的数据库（硬隔离边界）
-                manager.registerSelectedDatabases(activeConnections);
+                boolean hasDatabases = activeConnections != null && !activeConnections.isEmpty();
 
-                // 2. 构建授权别名清单注入 System Prompt（约束 Agent 只能访问勾选库）
-                String authorizedAliases = activeConnections.stream()
-                        .map(DbConnectionConfig::alias)
-                        .collect(Collectors.joining(", ", "[", "]"));
-                String systemPrompt = buildSystemPrompt(authorizedAliases);
+                // 1. 仅注册前端勾选的数据库（硬隔离边界）；无库时跳过，进入「无库咨询模式」
+                if (hasDatabases) {
+                    manager.registerSelectedDatabases(activeConnections);
+                }
 
-                // 3. 组装多库隔离工具集
-                AgentToolSet.DbSchemaTool schemaTool = new AgentToolSet.DbSchemaTool(manager);
-                AgentToolSet.ExplainTool explainTool = new AgentToolSet.ExplainTool(manager);
-                AgentToolSet.DbQueryTool queryTool = new AgentToolSet.DbQueryTool(manager);
+                // 2. 构建 System Prompt：有库走授权约束，无库走咨询模式提示（不虚构访问）
+                String systemPrompt;
                 ToolRegistry registry = new ToolRegistry(schemaGenerator);
-                registry.register(schemaTool);
-                registry.register(explainTool);
-                registry.register(queryTool);
+                if (hasDatabases) {
+                    String authorizedAliases = activeConnections.stream()
+                            .map(DbConnectionConfig::alias)
+                            .collect(Collectors.joining(", ", "[", "]"));
+                    systemPrompt = buildSystemPrompt(authorizedAliases);
+
+                    // 3. 组装多库隔离工具集
+                    AgentToolSet.DbSchemaTool schemaTool = new AgentToolSet.DbSchemaTool(manager);
+                    AgentToolSet.ExplainTool explainTool = new AgentToolSet.ExplainTool(manager);
+                    AgentToolSet.DbQueryTool queryTool = new AgentToolSet.DbQueryTool(manager);
+                    registry.register(schemaTool);
+                    registry.register(explainTool);
+                    registry.register(queryTool);
+                } else {
+                    log.info("[DB分析] 无库咨询模式：sessionId={} 未绑定目标数据库，仅文本咨询，不注册任何数据库工具", sessionId);
+                    systemPrompt = buildConsultingSystemPrompt();
+                }
 
                 // 4. 回载历史上下文（持久化的精简历史）
                 String historyContext = loadHistoryContext(sessionId);
@@ -110,24 +132,24 @@ public class DbAnalysisWorkbench {
                         .listener(new AgentEventListener() {
                             @Override
                             public void onStepStart(int step) {
-                                sendSseEvent(currentEmitter, "step_start", Map.of("step", step));
+                                sendSseEvent(currentEmitter, context.emitterClosed, "step_start", Map.of("step", step));
                             }
 
                             @Override
                             public void onChunk(String textChunk) {
-                                sendSseData(currentEmitter, "thought_chunk", textChunk);
+                                sendSseData(currentEmitter, context.emitterClosed, "thought_chunk", textChunk);
                             }
 
                             @Override
                             public void onToolStart(String toolName, String toolInputJson) {
-                                sendSseEvent(currentEmitter, "tool_start",
+                                sendSseEvent(currentEmitter, context.emitterClosed, "tool_start",
                                         Map.of("name", toolName, "args", toolInputJson));
                             }
 
                             @Override
                             public void onToolEnd(String toolName, Object toolOutput) {
                                 String output = toolOutput != null ? toolOutput.toString() : "(无输出)";
-                                sendSseEvent(currentEmitter, "tool_end", Map.of(
+                                sendSseEvent(currentEmitter, context.emitterClosed, "tool_end", Map.of(
                                         "name", toolName,
                                         "output", output,
                                         "length", output.length(),
@@ -143,11 +165,16 @@ public class DbAnalysisWorkbench {
 
                             @Override
                             public void onComplete(AgentResult result) {
-                                if (result.getFinalText() != null && !result.getFinalText().isEmpty()) {
-                                    sendSseData(currentEmitter, "text_chunk", result.getFinalText());
-                                }
+                                // 无论客户端是否已断开，本轮结论都持久化到会话，用户可在历史中查看
                                 persistCompletion(sessionId, prompt, result.getFinalText());
-                                sendSseEvent(currentEmitter, "complete", Map.of(
+                                if (context.emitterClosed.get()) {
+                                    manager.close();
+                                    return;
+                                }
+                                if (result.getFinalText() != null && !result.getFinalText().isEmpty()) {
+                                    sendSseData(currentEmitter, context.emitterClosed, "text_chunk", result.getFinalText());
+                                }
+                                sendSseEvent(currentEmitter, context.emitterClosed, "complete", Map.of(
                                         "finalText", result.getFinalText(),
                                         "totalSteps", result.getTotalSteps(),
                                         "totalTokens", result.getTotalTokens(),
@@ -166,8 +193,14 @@ public class DbAnalysisWorkbench {
             } catch (Exception e) {
                 log.error("[DB分析] 执行异常: {}", e.getMessage(), e);
                 manager.close();
-                sendSseData(emitterRef.get(), "error", e.getMessage());
-                emitterRef.get().complete();
+                if (!context.emitterClosed.get()) {
+                    sendSseData(emitterRef.get(), context.emitterClosed, "error", e.getMessage());
+                    try {
+                        emitterRef.get().complete();
+                    } catch (Exception ignore) {
+                        // 连接已结束，忽略
+                    }
+                }
             }
         });
 
@@ -186,8 +219,13 @@ public class DbAnalysisWorkbench {
         if (context == null) {
             throw new IllegalArgumentException("审批上下文不存在或已过期: " + suspendId);
         }
+        // 旧 SSE 连接已结束，重置关闭标志并绑定到新的 SSE 连接
+        context.emitterClosed.set(false);
         SseEmitter emitter = new SseEmitter(1_800_000L);
         context.emitterRef.set(emitter); // 重定向到新的 SSE 连接
+        emitter.onCompletion(() -> context.emitterClosed.set(true));
+        emitter.onTimeout(() -> context.emitterClosed.set(true));
+        emitter.onError(e -> context.emitterClosed.set(true));
 
         Thread.startVirtualThread(() -> {
             try {
@@ -198,10 +236,13 @@ public class DbAnalysisWorkbench {
 
                 AgentResult result = agentRunner.resume(suspendId, approval);
                 SseEmitter active = context.emitterRef.get();
-                if (result.getFinalText() != null && !result.getFinalText().isEmpty()) {
-                    sendSseData(active, "text_chunk", result.getFinalText());
+                if (context.emitterClosed.get()) {
+                    return;
                 }
-                sendSseEvent(active, "complete", Map.of(
+                if (result.getFinalText() != null && !result.getFinalText().isEmpty()) {
+                    sendSseData(active, context.emitterClosed, "text_chunk", result.getFinalText());
+                }
+                sendSseEvent(active, context.emitterClosed, "complete", Map.of(
                         "finalText", result.getFinalText(),
                         "totalSteps", result.getTotalSteps(),
                         "totalTokens", result.getTotalTokens(),
@@ -214,12 +255,20 @@ public class DbAnalysisWorkbench {
                 return;
             } catch (Exception e) {
                 log.error("[DB分析] resume 异常: {}", e.getMessage(), e);
-                sendSseData(context.emitterRef.get(), "error", e.getMessage());
+                if (!context.emitterClosed.get()) {
+                    sendSseData(context.emitterRef.get(), context.emitterClosed, "error", e.getMessage());
+                }
             } finally {
                 // 无论结果，本轮 resume 结束后释放会话级连接池并清理挂起上下文
                 context.manager.close();
                 activeRuns.remove(suspendId);
-                context.emitterRef.get().complete();
+                if (!context.emitterClosed.get()) {
+                    try {
+                        context.emitterRef.get().complete();
+                    } catch (Exception ignore) {
+                        // 连接已结束，忽略
+                    }
+                }
             }
         });
 
@@ -241,11 +290,15 @@ public class DbAnalysisWorkbench {
         activeRuns.put(state.getSuspendId(), context);
         log.warn("[DB分析] HITL 挂起: suspendId={}, pendingTools={}",
                 state.getSuspendId(), pendingTools);
-        sendSseEvent(context.emitterRef.get(), "suspend", Map.of(
+        sendSseEvent(context.emitterRef.get(), context.emitterClosed, "suspend", Map.of(
                 "suspendId", state.getSuspendId(),
                 "pendingTools", pendingTools
         ));
-        context.emitterRef.get().complete();
+        try {
+            context.emitterRef.get().complete();
+        } catch (Exception ignore) {
+            // 连接已结束，忽略
+        }
     }
 
     /** 依据勾选别名动态生成约束性 System Prompt。 */
@@ -267,6 +320,19 @@ public class DbAnalysisWorkbench {
                 """.formatted(authorizedAliases == null ? "[]" : authorizedAliases);
     }
 
+    /** 无库咨询模式提示词：本次会话未绑定任何目标数据库（纯咨询 / SQL 设计），无任何数据库工具可调用。 */
+    private String buildConsultingSystemPrompt() {
+        return """
+                你是一个资深的数据库架构师与 SQL 专家，当前处于「无库咨询模式」——本次会话未绑定任何目标数据库连接。
+                规则：
+                1. 你没有可调用的任何数据库探查 / 查询 / 执行计划工具，禁止声称已连接、查询或验证过某个真实数据库。
+                2. 请基于用户提供的业务逻辑与描述，直接输出可落地的成果：建表 DDL、SQL 语句设计、索引建议、查询优化思路等。
+                3. 未明确数据库方言时，默认同时给出 MySQL / PostgreSQL 的差异说明（必要时补充 GaussDB），帮助用户在不同目标库落地。
+                4. 若用户的需求必须真实连接数据库（如探查表结构、EXPLAIN 验证、数据对比），应明确告知：当前未绑定数据库，
+                   请点击输入框左侧 ＋ 号选择并授权目标库后再发起。
+                """;
+    }
+
     /** 从会话读取历史上下文（供同一会话续问时追加）。 */
     private String loadHistoryContext(String sessionId) {
         try {
@@ -285,43 +351,86 @@ public class DbAnalysisWorkbench {
         }
     }
 
-    /** 将历史以补丁形式拼接到 prompt 之后（精简实现：直接呈现先前结论）。 */
+    /** 将历史消息 JSON 数组转成可读的「历史对话」补丁，拼接到当前 prompt 之后。 */
     private String composeHistory(String historyContext) {
         if (historyContext == null || historyContext.isBlank() || "[]".equals(historyContext)) {
             return "";
         }
-        return "\n\n【会话历史参考】\n" + historyContext + "\n（以上为历史记录，可作为上下文参考）";
+        StringBuilder sb = new StringBuilder("\n\n【会话历史参考】\n");
+        List<Map<String, String>> messages = parseContextMessages(historyContext);
+        if (messages.isEmpty()) {
+            // 容错：历史遗留非结构化文本，原样作为参考
+            sb.append(historyContext);
+        } else {
+            for (Map<String, String> msg : messages) {
+                String role = msg.get("role");
+                String content = msg.get("content");
+                if (content == null || content.isBlank()) {
+                    continue;
+                }
+                String who = "user".equals(role) ? "用户" : ("assistant".equals(role) ? "AI" : String.valueOf(role));
+                sb.append(who).append('：').append(content).append('\n');
+            }
+        }
+        sb.append("\n（以上为历史记录，可作为上下文参考）");
+        return sb.toString();
     }
 
-    /** 会话结束后持久化最终结果到 context_messages。 */
+    /**
+     * 会话结束后，将本轮「用户指令 + 分析结论」以结构化 Message 追加到 context_messages（JSONB Message 列表）。
+     * 追加而非覆盖，保证多轮对话历史随会话累积；写入前序列化为合法 JSON，避免 jsonb 列拒绝非 JSON 纯文本。
+     */
     private void persistCompletion(String sessionId, String prompt, String finalText) {
         try {
             if (sessionId == null || sessionId.isBlank()) {
                 return;
             }
-            String runDoc = "【用户指令】" + prompt + "\n【分析结论】" + (finalText == null ? "(无)" : finalText);
-            sessionService.updateContext(sessionId, runDoc);
+            SessionDbAnalysis session = sessionService.getSession(sessionId);
+            List<Map<String, String>> history = parseContextMessages(session.getContextMessages());
+            history.add(Map.of("role", "user", "content", prompt == null ? "" : prompt));
+            history.add(Map.of("role", "assistant", "content", finalText == null ? "(无)" : finalText));
+            sessionService.updateContext(sessionId, OBJECT_MAPPER.writeValueAsString(history));
         } catch (Exception e) {
             log.warn("[DB分析] 持久化会话结论失败: {}", e.getMessage());
         }
     }
 
+    /** 解析 context_messages JSONB（Message 数组）；空或非 JSON（历史遗留文本）时返回空列表。 */
+    private List<Map<String, String>> parseContextMessages(String raw) {
+        if (raw == null || raw.isBlank()) {
+            return new ArrayList<>();
+        }
+        try {
+            List<Map<String, String>> list = OBJECT_MAPPER.readValue(
+                    raw, new TypeReference<List<Map<String, String>>>() {
+                    });
+            return list == null ? new ArrayList<>() : new ArrayList<>(list);
+        } catch (Exception e) {
+            log.debug("[DB分析] context_messages 非 JSON Message 数组，忽略: {}", e.getMessage());
+            return new ArrayList<>();
+        }
+    }
+
     // ==================== SSE 发送工具方法 ====================
 
-    private void sendSseEvent(SseEmitter emitter, String eventName, Object data) {
-        if (emitter == null) {
-            return;
+    private void sendSseEvent(SseEmitter emitter, AtomicBoolean closed, String eventName, Object data) {
+        if (emitter == null || (closed != null && closed.get())) {
+            return; // 连接已结束，静默丢弃，避免持续刷屏
         }
         try {
             String json = OBJECT_MAPPER.writeValueAsString(data);
             emitter.send(SseEmitter.event().name(eventName).data(json));
         } catch (Exception e) {
+            // 客户端断开 / 响应已提交导致发送失败：标记连接关闭并降噪
+            if (closed != null) {
+                closed.set(true);
+            }
             log.debug("SSE 发送失败 (客户端可能已断开): {}", e.getMessage());
         }
     }
 
-    private void sendSseData(SseEmitter emitter, String eventName, String text) {
-        sendSseEvent(emitter, eventName, text);
+    private void sendSseData(SseEmitter emitter, AtomicBoolean closed, String eventName, String text) {
+        sendSseEvent(emitter, closed, eventName, text);
     }
 
     /**
@@ -334,5 +443,7 @@ public class DbAnalysisWorkbench {
         public String sessionId;
         public SessionBoundDbManager manager;
         public AtomicReference<SseEmitter> emitterRef;
+        /** SSE 连接生命周期标志：complete / 断开 / 超时 / 发送失败后置 true。 */
+        public AtomicBoolean emitterClosed = new AtomicBoolean(false);
     }
 }

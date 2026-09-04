@@ -95,7 +95,7 @@
           <el-icon class="ctx-close" @click="toggleAlias(alias, false)"><Close /></el-icon>
         </span>
       </template>
-      <span v-else class="ctx-empty">未选择，请在下方点击 ＋ 号选择目标数据库</span>
+      <span v-else class="ctx-empty">未绑定数据库（无库咨询模式），需探查/执行时点击 ＋ 号选择授权</span>
     </div>
 
     <!-- ====== 消息区域 ====== -->
@@ -105,8 +105,9 @@
         <div class="empty-icon">🛢️</div>
         <div class="empty-title">数据库性能分析</div>
         <div class="empty-desc">
-          配置并勾选目标数据库后，输入分析指令。例如：对比【生产主库】与【迁移Gauss库】中
-          t_order 表的 Schema 差异，并分别生成 EXPLAIN 执行计划。
+          输入分析指令即可开始：已绑定目标数据库可做 Schema 对比 / EXPLAIN / 只读探查；
+          未绑定数据库时（无库咨询模式）可直接描述业务逻辑，由 AI 输出建表 DDL / SQL 设计 /
+          索引建议等。例如：请帮我设计一个「订单 + 订单明细 + 退款单」的业务表结构及常用查询 SQL。
         </div>
         <div class="empty-features">
           <span>多库横向对比</span>
@@ -155,7 +156,9 @@
         <div class="msg-avatar">🤖</div>
         <div class="msg-body">
           <div class="msg-role">AI</div>
-          <div class="msg-text streaming">正在分析目标数据库<span class="cursor">|</span></div>
+          <div class="msg-text streaming">
+            {{ selectedAliases.length ? '正在分析目标数据库' : '正在分析（无库咨询模式）' }}<span class="cursor">|</span>
+          </div>
         </div>
       </div>
     </div>
@@ -213,11 +216,11 @@
           @keydown.ctrl.enter.prevent="handleSend"
         />
 
-        <!-- 发起分析按钮 -->
+        <!-- 发起分析按钮（未选库也可发送，进入「无库咨询模式」） -->
         <el-button
           class="send-btn"
           type="primary"
-          :disabled="!selectedAliases.length || !prompt.trim()"
+          :disabled="!prompt.trim()"
           :loading="running"
           @click="handleSend"
         >
@@ -227,7 +230,8 @@
 
       <!-- 未选库提示 -->
       <div v-if="!selectedAliases.length" class="input-hint">
-        点击左侧 ＋ 号，从已配置连接中选择本次会话的目标数据库（可多选）
+        未绑定数据库：可直接咨询（如业务逻辑转 SQL 设计，AI 将输出多方言 DDL/SQL 与说明）；
+        需探查真实表结构/EXPLAIN 时，请点击左侧 ＋ 号选择并授权目标库
       </div>
     </div>
 
@@ -356,11 +360,7 @@ function selectSession(id: string) {
   if (running.value) return
   currentSessionId.value = id
   const session = sessions.value.find(s => s.id === id)
-  if (session?.contextMessages && session.contextMessages !== '[]') {
-    messages.value = [{ role: 'assistant', content: session.contextMessages }]
-  } else {
-    messages.value = []
-  }
+  messages.value = parseHistoryMessages(session?.contextMessages)
   // 从元数据快照还原勾选（密码需用户重新确认，此处仅还原别名）
   try {
     const meta = JSON.parse(session?.selectedDbMeta || '[]') as Pick<
@@ -472,16 +472,13 @@ function buildPrompt(extra: string): string {
 
 async function handleSend() {
   const text = buildPrompt('')
-  if (!selectedAliases.value.length) {
-    ElMessage.warning('请先点击 ＋ 号选择目标数据库')
-    return
-  }
   if (!text) {
     ElMessage.warning('请输入分析指令')
     return
   }
+  // 未选库 → 无库咨询模式（前端不拦截，conns 传空数组由后端走纯文本咨询分支）
   const conns = activeConnections()
-  if (!conns.length) {
+  if (selectedAliases.value.length && !conns.length) {
     ElMessage.warning('勾选的库无连接信息，请重新添加并勾选')
     return
   }
@@ -676,6 +673,30 @@ function decodeSseText(raw: string): string {
     if (parsed !== null) return parsed
   }
   return raw
+}
+
+/**
+ * 将后端 context_messages（JSONB Message 数组文本）解析为前端消息列表用于历史回显。
+ * - '[]' / 空：返回空列表
+ * - JSON 数组：逐条转换为 {role, content}（工具消息等无纯文本的忽略）
+ * - 历史遗留的非 JSON 文本：整段作为一条 AI 结论展示（容错）
+ */
+function parseHistoryMessages(raw?: string): Message[] {
+  if (!raw || raw === '[]') return []
+  const parsed = parseJson<unknown>(raw)
+  if (Array.isArray(parsed)) {
+    const list: Message[] = []
+    for (const item of parsed) {
+      if (!item || typeof item !== 'object') continue
+      const rec = item as Record<string, unknown>
+      const role = rec.role === 'user' ? 'user' : 'assistant'
+      const content = typeof rec.content === 'string' ? rec.content : ''
+      if (content) list.push({ role, content })
+    }
+    return list
+  }
+  // 容错：历史遗留纯文本结论，作为一条 AI 消息展示
+  return [{ role: 'assistant', content: raw }]
 }
 
 function prettyJson(text: string): string {
