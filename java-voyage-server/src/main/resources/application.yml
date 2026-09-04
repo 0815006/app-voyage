@@ -7,7 +7,8 @@ spring:
     virtual:
       enabled: true
   datasource:
-    url: ${DB_URL:jdbc:postgresql://localhost:5432/voyage_db}
+    # stringtype=unspecified: 允许 PG 将 JDBC 字符串参数按目标列类型推断/转换(jsonb 列插入 String 不再报类型不匹配)
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/voyage_db?stringtype=unspecified}
     username: ${DB_USER:root}
     password: ${DB_PASS:root}
     driver-class-name: org.postgresql.Driver
@@ -18,10 +19,16 @@ spring:
       connection-timeout: 10000
   flyway:
     enabled: true
-    locations: classpath:db/migration
+    # 应用侧脚本 + SDK 固化脚本（ai-client-sdk 提供的 db/sdk-migration）统一由 Flyway 调度执行
+    locations:
+      - classpath:db/migration
+      - classpath:db/sdk-migration
     baseline-on-migrate: true
     baseline-version: 0
     validate-on-migrate: true
+    # SDK 固化脚本版本(V1.0.0_1 => 1.0.0.1)低于应用既有最高版本(V1.4)，
+    # 属于外部依赖库补丁式迁移，需允许乱序执行
+    out-of-order: true
     encoding: UTF-8
     create-schemas: true
     default-schema: public
@@ -74,6 +81,15 @@ ai:
     model: ${AI_MODEL:deepseek-v4-pro}
     timeout: 60s
     max-retries: 3
+  # LLM 调用上下文持久化（Trace 自动落盘 sys_llm_invoke_log）
+  # 建表 SQL 由 ai-client-sdk 固化于 classpath:db/sdk-migration，已加入 spring.flyway.locations 统一调度
+  # auto-ddl 保持 false：不启用 SDK 兜底建表，避免与 Flyway 双建表冲突
+  client:
+    trace:
+      enabled: ${AI_TRACE_ENABLED:true}
+      auto-ddl: false
+      max-payload-length: 50000
+      async-pool-size: 2
 
 logging:
   level:

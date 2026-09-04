@@ -571,7 +571,7 @@ function handleEvent(event: string, data: string) {
       break
     }
     case 'thought_chunk': {
-      appendAssistantText(data)
+      appendAssistantText(decodeSseText(data))
       break
     }
     case 'tool_start': {
@@ -595,7 +595,7 @@ function handleEvent(event: string, data: string) {
       break
     }
     case 'text_chunk': {
-      appendAssistantText(data)
+      appendAssistantText(decodeSseText(data))
       break
     }
     case 'suspend': {
@@ -611,11 +611,11 @@ function handleEvent(event: string, data: string) {
       break
     }
     case 'error': {
-      appendAssistantText(`⚠️ ${data}`)
+      appendAssistantText(`⚠️ ${decodeSseText(data)}`)
       break
     }
     default: {
-      appendAssistantText(data)
+      appendAssistantText(decodeSseText(data))
     }
   }
   scrollToBottom()
@@ -661,6 +661,21 @@ function parseJson<T>(text: string): T | null {
   } catch {
     return null
   }
+}
+
+/**
+ * SSE 文本事件（thought_chunk / text_chunk / error / 未知事件）的 data 负载，
+ * 是后端对字符串再次 JSON.stringify 后的结果（含首尾引号），需反解还原原文；
+ * 若本身不是 JSON 字符串（历史兼容/其它形态），则原样返回。
+ */
+function decodeSseText(raw: string): string {
+  if (!raw) return ''
+  const trimmed = raw.trim()
+  if (trimmed.startsWith('"')) {
+    const parsed = parseJson<string>(trimmed)
+    if (parsed !== null) return parsed
+  }
+  return raw
 }
 
 function prettyJson(text: string): string {
