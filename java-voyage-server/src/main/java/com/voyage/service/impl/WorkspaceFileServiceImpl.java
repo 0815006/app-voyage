@@ -285,7 +285,9 @@ public class WorkspaceFileServiceImpl
         // 2) 清理：数据库有记录但磁盘文件已缺失 → 删除表记录
         Map<String, WorkspaceFile> metaByName = list(new LambdaQueryWrapper<WorkspaceFile>()
                         .eq(WorkspaceFile::getSubDirId, subDirId)
-                        .select(WorkspaceFile::getFileId, WorkspaceFile::getFileName, WorkspaceFile::getParsedMarkdown))
+                        // 必须包含 subDirId：回填/清理分支 resolvePhysicalPath 依赖它定位物理目录
+                        .select(WorkspaceFile::getFileId, WorkspaceFile::getSubDirId,
+                                WorkspaceFile::getFileName, WorkspaceFile::getParsedMarkdown))
                 .stream()
                 .collect(Collectors.toMap(WorkspaceFile::getFileName, Function.identity(), (a, b) -> a));
         for (Map.Entry<String, WorkspaceFile> entry : metaByName.entrySet()) {
