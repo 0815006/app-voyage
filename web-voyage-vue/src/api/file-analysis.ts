@@ -74,7 +74,16 @@ export function listFiles(subDirId: string): Promise<WorkspaceFileItem[]> {
   return request.get(`/workspace/${subDirId}/files`)
 }
 
-/** 上传文件到工作区（FormData，axios 自动注入 X-Emp-No） */
+/**
+ * 上传文件到工作区（FormData，axios 自动注入 X-Emp-No）。
+ * <p>
+ * 必须显式覆盖 'Content-Type': 'multipart/form-data'：
+ * 本 axios 实例默认 Content-Type 为 application/json，若不覆盖，
+ * transformRequest 命中 JSON 分支会执行 formDataToJSON + JSON.stringify，
+ * 把 FormData 序列化为 JSON，导致后端 multipart 解析失败(400)。
+ * 显式指定 multipart 后，浏览器 XHR 会自动补全 boundary 发送真正的 multipart 体，
+ * 后端以 @RequestParam("file") MultipartFile 正常接收。
+ */
 export function uploadFile(subDirId: string, file: File): Promise<WorkspaceFileDetail> {
   const form = new FormData()
   form.append('file', file)

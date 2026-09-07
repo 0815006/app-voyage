@@ -6,25 +6,14 @@
         <el-icon class="fa-title-icon"><Files /></el-icon>
         <span>File Analysis · 文件分析</span>
       </div>
-      <div v-if="currentWorkspace" class="fa-ws-tag">
-        <el-tag type="primary" effect="plain" size="large">
+      <div class="fa-header-actions">
+        <el-tag v-if="currentWorkspace" type="primary" effect="plain" size="large">
           当前工作区: {{ currentWorkspace.dirName }}
         </el-tag>
-        <el-tooltip content="删除工作区（连带文件与物理目录）" placement="bottom">
-          <el-button
-            :icon="Delete"
-            circle
-            plain
-            type="danger"
-            size="small"
-            :disabled="running"
-            @click="handleDeleteWorkspace"
-          />
-        </el-tooltip>
+        <el-button type="primary" :disabled="running" @click="handleCreateWorkspace">
+          <el-icon><Plus /></el-icon>&nbsp;新建工作区
+        </el-button>
       </div>
-      <el-button v-else type="primary" @click="handleCreateWorkspace">
-        <el-icon><Plus /></el-icon>&nbsp;新建工作区
-      </el-button>
     </div>
 
     <div class="fa-main">
@@ -50,6 +39,19 @@
                 <div class="ws-name">{{ ws.dirName }}</div>
                 <div class="ws-time">{{ fmtTime(ws.updateTime) }}</div>
               </div>
+              <!-- 悬停显示三点：删除该工作区（@click.stop 避免触发上方切换） -->
+              <span class="fa-ws-ops">
+                <el-tooltip content="删除工作区（连带文件与物理目录）" placement="top">
+                  <el-button
+                    link
+                    type="danger"
+                    :icon="MoreFilled"
+                    size="small"
+                    :disabled="running"
+                    @click.stop="handleDeleteWorkspace(ws)"
+                  />
+                </el-tooltip>
+              </span>
             </div>
             <el-empty v-if="!workspaces.length && !loadingWorkspaces" description="暂无工作区" :image-size="48" />
           </div>
@@ -58,9 +60,21 @@
         <div class="fa-side-block">
           <div class="fa-side-head">
             <span>📁 文件树（当前工作区）</span>
-            <el-button text type="primary" :disabled="!currentWorkspace" @click="openUploader">
-              <el-icon><UploadFilled /></el-icon>
-            </el-button>
+            <el-tooltip
+              :content="`上传文件，支持：${ALLOWED_UPLOAD_TEXT}`"
+              placement="top"
+              :disabled="!currentWorkspace"
+            >
+              <el-button
+                text
+                type="primary"
+                :loading="uploading"
+                :disabled="!currentWorkspace || running"
+                @click="openUploader"
+              >
+                <el-icon v-if="!uploading"><UploadFilled /></el-icon>
+              </el-button>
+            </el-tooltip>
           </div>
           <div v-loading="loadingFiles" class="fa-file-list">
             <template v-if="currentWorkspace && files.length">
@@ -86,8 +100,14 @@
           </div>
         </div>
 
-        <!-- 隐藏上传触发 -->
-        <input ref="uploaderRef" type="file" class="fa-hidden-input" @change="onFilePicked" />
+        <!-- 隐藏上传触发：accept 过滤 + 前端扩展名校验，避免选中不支持格式后才收到后端 400 -->
+        <input
+          ref="uploaderRef"
+          type="file"
+          class="fa-hidden-input"
+          :accept="ALLOWED_UPLOAD_ACCEPT"
+          @change="onFilePicked"
+        />
       </aside>
 
       <!-- ==================== 右侧主对话区 ==================== -->
@@ -168,10 +188,11 @@
           </div>
         </div>
 
-        <!-- 输入区 -->
+        <!-- 输入区：发送按钮置于输入框右侧，高度与输入框一致 -->
         <div class="fa-input-bar">
           <el-input
             v-model="prompt"
+            class="fa-input-main"
             type="textarea"
             :rows="3"
             resize="none"
@@ -179,13 +200,18 @@
             placeholder="请输入分析指令，例如：对《季度报告.docx》做占位符质检，并生成质检报告"
             @keydown.enter.exact.prevent="handleSend"
           />
-          <div class="fa-input-actions">
-            <span class="fa-hint">Enter 发送</span>
-            <el-button type="primary" :loading="running" :disabled="!prompt.trim()" @click="handleSend">
-              {{ running ? '执行中' : '发送' }}
-              <el-icon class="el-icon--right"><Promotion /></el-icon>
+          <el-tooltip content="Enter 发送" placement="top">
+            <el-button
+              class="fa-send-btn"
+              type="primary"
+              :loading="running"
+              :disabled="!prompt.trim()"
+              @click="handleSend"
+            >
+              <span v-if="!running">发送</span>
+              <el-icon v-if="!running" class="el-icon--right"><Promotion /></el-icon>
             </el-button>
-          </div>
+          </el-tooltip>
         </div>
       </section>
     </div>
@@ -206,6 +232,7 @@ import {
   Files,
   Folder,
   Loading,
+  MoreFilled,
   Plus,
   Promotion,
   Refresh,
@@ -230,6 +257,14 @@ import {
   type WorkspaceSubDir,
 } from '@/api/file-analysis'
 import { getCurrentEmpNo } from '@/utils/currentUser'
+
+/* ==================== 上传格式白名单（与后端 ALLOWED_EXT 保持一致） ==================== */
+const ALLOWED_UPLOAD_EXT = [
+  'docx', 'doc', 'pdf', 'txt', 'md', 'markdown', 'json', 'png', 'jpg', 'jpeg', 'xlsx', 'xls',
+]
+const ALLOWED_UPLOAD_TEXT = 'docx / doc / pdf / txt / md / json / png / jpg / xlsx / xls'
+const ALLOWED_UPLOAD_ACCEPT =
+  '.doc,.docx,.pdf,.txt,.md,.markdown,.json,.png,.jpg,.jpeg,.xlsx,.xls'
 
 /* ==================== 状态 ==================== */
 
@@ -308,12 +343,12 @@ async function handleCreateWorkspace() {
   }
 }
 
-/** 删除工作区 */
-async function handleDeleteWorkspace() {
-  if (running.value || !currentWsId.value) return
+/** 删除指定工作区（左侧历史列表三点入口；二次确认后物理目录 + 数据库级联清理） */
+async function handleDeleteWorkspace(ws: WorkspaceSubDir) {
+  if (running.value) return
   try {
     await ElMessageBox.confirm(
-      `确定删除工作区「${currentWorkspace.value?.dirName}」？其下所有文件与物理目录将一并清除。`,
+      `确定删除工作区「${ws.dirName}」？其下所有文件与物理目录将一并清除。`,
       '删除工作区',
       { type: 'warning', confirmButtonText: '删除', cancelButtonText: '取消' }
     )
@@ -321,10 +356,13 @@ async function handleDeleteWorkspace() {
     return
   }
   try {
-    await deleteWorkspace(currentWsId.value)
-    currentWsId.value = ''
-    files.value = []
-    messages.value = []
+    await deleteWorkspace(ws.subDirId)
+    // 若删除的正是当前工作区，则重置选中状态，交由 loadWorkspaces 自动落到第一个剩余工作区
+    if (ws.subDirId === currentWsId.value) {
+      currentWsId.value = ''
+      files.value = []
+      messages.value = []
+    }
     await loadWorkspaces()
     ElMessage.success('工作区已删除')
   } catch {
@@ -356,12 +394,19 @@ async function switchToWorkspace(subDirId: string) {
 
 /* ==================== 文件操作 ==================== */
 
+/** 文档/文本类（后端会解析为 Markdown），图片类仅存盘供预览 */
+const PARSEABLE_DOC_EXT = ['docx', 'doc', 'pdf', 'xlsx', 'xls', 'txt', 'md', 'markdown', 'json']
+
 async function doUpload(subDirId: string, file: File) {
   uploading.value = true
   try {
     await uploadFile(subDirId, file)
     files.value = await listFiles(subDirId)
-    ElMessage.success(`「${file.name}」上传成功，已预解析内容`)
+    const dot = file.name.lastIndexOf('.')
+    const ext = (dot >= 0 ? file.name.slice(dot + 1) : '').toLowerCase()
+    ElMessage.success(
+      PARSEABLE_DOC_EXT.includes(ext) ? `「${file.name}」上传成功，已预解析内容` : `「${file.name}」上传成功`
+    )
   } catch {
     // 拦截器已提示
   } finally {
@@ -382,7 +427,13 @@ async function onFilePicked(e: Event) {
     } else if (uploading.value) {
       ElMessage.warning('正在上传，请稍候')
     } else {
-      await doUpload(currentWsId.value, file)
+      const dot = file.name.lastIndexOf('.')
+      const ext = (dot >= 0 ? file.name.slice(dot + 1) : '').toLowerCase()
+      if (!ALLOWED_UPLOAD_EXT.includes(ext)) {
+        ElMessage.warning(`暂不支持「${ext || '无扩展名'}」格式，支持：${ALLOWED_UPLOAD_TEXT}`)
+      } else {
+        await doUpload(currentWsId.value, file)
+      }
     }
   }
   input.value = ''
@@ -730,10 +781,11 @@ onBeforeUnmount(() => {
   color: var(--el-color-primary);
 }
 
-.fa-ws-tag {
+.fa-header-actions {
   display: flex;
   align-items: center;
   gap: 8px;
+  min-width: 0;
 }
 
 /* ========== 主体双栏 ========== */
@@ -831,6 +883,17 @@ onBeforeUnmount(() => {
 .ws-time {
   font-size: 11px;
   color: var(--el-text-color-secondary);
+}
+
+/* 悬停显示三点删除入口 */
+.fa-ws-ops {
+  display: none;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.fa-ws-item:hover .fa-ws-ops {
+  display: inline-flex;
 }
 
 /* 文件条目 */
@@ -1076,22 +1139,28 @@ onBeforeUnmount(() => {
   margin: 0;
 }
 
-/* 输入区 */
+/* 输入区：输入框与发送按钮横向等高排列 */
 .fa-input-bar {
+  display: flex;
+  align-items: stretch;
+  gap: 10px;
   padding: 12px;
   border-top: 1px solid var(--el-border-color-lighter);
   background: #fff;
 }
 
-.fa-input-actions {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-top: 8px;
+.fa-input-main {
+  flex: 1;
+  min-width: 0;
 }
 
-.fa-hint {
-  font-size: 12px;
-  color: var(--el-text-color-secondary);
+.fa-input-main :deep(.el-textarea__inner) {
+  height: 100% !important;
+}
+
+.fa-send-btn {
+  flex-shrink: 0;
+  width: 92px;
+  margin-left: 0;
 }
 </style>
