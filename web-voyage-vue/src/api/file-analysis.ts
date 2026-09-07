@@ -133,6 +133,21 @@ export function deleteFile(fileId: string): Promise<void> {
   return request.delete(`/workspace/file/${fileId}`)
 }
 
+/** 文件清单对账结果 */
+export interface ReconcileResult {
+  addedCount: number
+  removedCount: number
+  removedNames: string[]
+}
+
+/**
+ * 文件清单对账（刷新）：磁盘 ↔ 数据库双向往返同步。
+ * 磁盘有新增受控文件 → 登记入库；数据库有记录但磁盘已缺失 → 删除记录。
+ */
+export function reconcileFiles(subDirId: string): Promise<ReconcileResult> {
+  return request.post(`/workspace/${subDirId}/files/reconcile`)
+}
+
 /* ==================== 文件分析对话（SSE） ==================== */
 
 /** 文件分析对话请求参数 */

@@ -57,4 +57,22 @@ public interface WorkspaceFileService {
      * @return 本次新注册的文件元数据列表
      */
     List<WorkspaceFile> syncGeneratedFiles(String empNo, String subDirId, long afterEpochMillis);
+
+    /**
+     * 文件清单对账（磁盘 ↔ 数据库双向往返同步，供「刷新」按钮触发）：
+     * <ul>
+     *   <li>磁盘上存在但数据库缺失的受控文件 → 登记入库（含文本类预解析）；</li>
+     *   <li>数据库有记录但磁盘已缺失（含整个物理目录缺失）→ 删除对应表记录。</li>
+     * </ul>
+     * 适用于 Agent 异常/断流等未走 onComplete 同步、或磁盘被外部增删导致记录失配的场景。
+     *
+     * @param empNo    操作员工号
+     * @param subDirId 工作区 ID
+     * @return 对账结果（新增/删除统计 + 被删除文件名）
+     */
+    ReconcileResult reconcileFiles(String empNo, String subDirId);
+
+    /** 文件清单对账结果。 */
+    record ReconcileResult(int addedCount, int removedCount, List<String> removedNames) {
+    }
 }

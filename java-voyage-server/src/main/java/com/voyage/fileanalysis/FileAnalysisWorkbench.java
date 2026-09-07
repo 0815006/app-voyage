@@ -8,6 +8,8 @@ import com.realapex.agent.execution.AgentResult;
 import com.realapex.agent.execution.AgentRunner;
 import com.realapex.agent.execution.AgentStepResult;
 import com.realapex.agent.tool.ToolRegistry;
+import com.realapex.tool.base.BaseToolConfig;
+import com.realapex.tool.base.BaseToolFactory;
 import com.realapex.tool.doc.config.DocToolConfig;
 import com.realapex.tool.doc.config.DocToolFactory;
 import com.voyage.common.BusinessException;
@@ -33,9 +35,10 @@ import java.util.concurrent.atomic.AtomicReference;
  * 文件分析（Document Studio）编排台 —— 文件分析 Agent 核心集成。
  * <p>
  * 以「当前激活的工作区（物理隔离子目录）」为沙箱边界：每轮对话按工作区
- * {@code abs_path} 动态构建 {@link DocToolConfig} 并通过 {@link DocToolFactory}
- * 注册 ai-tool-doc 全套工具（read_and_convert_doc / inspect_template_schema /
- * render_document），工具内部 PathSafety 二次校验阻断 ../ 路径穿越。
+ * {@code abs_path} 动态构建沙箱配置，注册 ai-tool-doc 文档工具
+ * （read_and_convert_doc / inspect_template_schema / render_document）与
+ * ai-tool-sdk 基础文件系统工具（writeMarkdown / writeFile / readFile / editFile 等），
+ * 工具内部 PathSafety 二次校验阻断 ../ 路径穿越。
  * <p>
  * 会话上下文持久化于 biz_session_text_analysis，Agent 渲染生成的报告在工作区结束
  * 时由文件服务同步注册为 biz_workspace_file，前端可下载 / 预览。
@@ -102,7 +105,7 @@ public class FileAnalysisWorkbench {
                 List<WorkspaceFile> files = fileService.listBySubDir(empNo, subDirId);
                 StringBuilder fileManifest = buildFileManifest(files);
 
-                // 4. 构建当前工作区沙箱工具集（动态注册 ai-tool-doc 全套工具）
+                // 4. 构建当前工作区沙箱工具集（动态注册 ai-tool-doc 文档工具 + ai-tool-sdk 基础文件系统工具）
                 DocToolConfig config = DocToolConfig.builder()
                         .baseDir(baseDir)
                         // 输出目录指向工作区根目录，便于「根目录扫描」将渲染产物注册为工作区文件
@@ -110,6 +113,13 @@ public class FileAnalysisWorkbench {
                         .build();
                 ToolRegistry registry = new ToolRegistry(schemaGenerator);
                 DocToolFactory.createDocTools(config).forEach(registry::register);
+                // 装配 ai-tool-sdk 文件系统工具组（writeMarkdown / writeFile / readFile / editFile /
+                // readDir / getTree / makeDir / searchFiles / searchContent），使 Agent 能直接把
+                // Markdown/文本报告写入当前工作区，写入产物由 syncGeneratedFiles 同步为工作区文件。
+                BaseToolConfig baseConfig = BaseToolConfig.builder()
+                        .baseDir(baseDir)
+                        .build();
+                BaseToolFactory.createFileSystemTools(baseConfig).forEach(registry::register);
                 log.info("[文件分析] 会话 subDirId={}, 工具={}, 文件数={}",
                         subDirId, registry.getToolDefinitions().size(), files.size());
 
@@ -190,6 +200,13 @@ public class FileAnalysisWorkbench {
 
             } catch (Exception e) {
                 log.error("[文件分析] 执行异常: {}", e.getMessage(), e);
+                // 兜底：Agent 执行异常/断流时，只要工具已产生落盘产物，仍按时间窗同步注册为工作区文件，
+                // 避免出现「磁盘有文件、数据库无记录」的失配（用户也可通过文件树刷新按钮二次对账）。
+                try {
+                    fileService.syncGeneratedFiles(empNo, subDirId, runStartEpoch);
+                } catch (Exception syncEx) {
+                    log.warn("[文件分析] 异常兜底同步渲染产物失败: {}", syncEx.getMessage());
+                }
                 if (!emitterClosed.get()) {
                     sendSseEvent(emitterRef.get(), emitterClosed, "error", e.getMessage());
                     try {
@@ -225,20 +242,28 @@ public class FileAnalysisWorkbench {
                 展示名称: %s
                 沙箱绝对路径: %s
 
-                【可调用工具（ai-tool-doc）】
+                【可调用工具】
+                （一）文档分析（ai-tool-doc）
                 - read_and_convert_doc: 将当前工作区内的 Word/Excel/PDF 文档转换为结构化 Markdown。
                   入参 source 必须使用【文件名】或相对当前工作区的相对路径，禁止使用绝对路径。
                 - inspect_template_schema: 探查 .docx/.xlsx 模板的占位符变量 Schema。
-                - render_document: 将结构化数据(JSON)渲染进 .docx/.xlsx 模板生成新报告，
+                - render_document: 将结构化数据(JSON)渲染进 .docx/.xlsx 模板生成 Word/Excel 报告，
                   生成文件自动落入当前工作区（用户可在文件树中下载）。
+                （二）文件系统基础能力（ai-tool-sdk）
+                - writeMarkdown: 将结构化 Markdown 直接写入当前工作区（自动建父目录），
+                  最适合把分析结论/质检报告落盘为 .md 文件。相对路径或文件名均可。
+                - writeFile / editFile / readFile: 通用文本文件写入、就地编辑、读取。
+                - makeDir / readDir / getTree / searchFiles / searchContent: 目录与内容检索。
+                  生成的 .md / .txt 等文本文件会在本轮结束后自动同步到当前工作区文件树，可下载。
 
                 【安全规则】
                 1. 所有工具只能操作当前工作区内的文件；工作区外文件一律拒绝，禁止尝试 ../ 穿越。
                 2. 引用文件时以用户提供的文件清单中的文件名为准，不要臆造不存在的文件。
                 3. 若用户要求检查占位符残留/模板变量一致性，优先 read_and_convert_doc 解析内容，
                    结合 inspect_template_schema 比对模板 Schema 后给出结论。
-                4. 需要产出分析/质检报告文档时，使用 render_document 依据模板渲染，并告知用户
-                   报告已生成到当前工作区文件树（可下载）。
+                4. 需要产出分析/质检报告时：用户指定或适合 Markdown 报告时，使用 writeMarkdown
+                   直接写入 .md 并告知用户已生成到当前工作区文件树（可下载/预览）；只有用户
+                   明确要求 Word/Excel 正式交付件时，才使用 render_document 依据模板渲染。
                 """.formatted(dirName, absPath);
     }
 

@@ -60,21 +60,38 @@
         <div class="fa-side-block">
           <div class="fa-side-head">
             <span>📁 文件树（当前工作区）</span>
-            <el-tooltip
-              :content="`上传文件，支持：${ALLOWED_UPLOAD_TEXT}`"
-              placement="top"
-              :disabled="!currentWorkspace"
-            >
-              <el-button
-                text
-                type="primary"
-                :loading="uploading"
-                :disabled="!currentWorkspace || running"
-                @click="openUploader"
+            <div class="fa-file-head-ops">
+              <el-tooltip
+                :content="`上传文件，支持：${ALLOWED_UPLOAD_TEXT}`"
+                placement="top"
+                :disabled="!currentWorkspace"
               >
-                <el-icon v-if="!uploading"><UploadFilled /></el-icon>
-              </el-button>
-            </el-tooltip>
+                <el-button
+                  text
+                  type="primary"
+                  :loading="uploading"
+                  :disabled="!currentWorkspace || running"
+                  @click="openUploader"
+                >
+                  <el-icon v-if="!uploading"><UploadFilled /></el-icon>
+                </el-button>
+              </el-tooltip>
+              <el-tooltip
+                content="刷新：检查磁盘与数据库记录一致性，自动补齐新生成文件 / 清理磁盘缺失的失配记录"
+                placement="top"
+                :disabled="!currentWorkspace"
+              >
+                <el-button
+                  text
+                  type="primary"
+                  :loading="syncingFiles"
+                  :disabled="!currentWorkspace || running"
+                  @click="handleRefreshFiles"
+                >
+                  <el-icon v-if="!syncingFiles"><Refresh /></el-icon>
+                </el-button>
+              </el-tooltip>
+            </div>
           </div>
           <div v-loading="loadingFiles" class="fa-file-list">
             <template v-if="currentWorkspace && files.length">
@@ -250,6 +267,7 @@ import {
   getSubDirSession,
   listFiles,
   listWorkspaces,
+  reconcileFiles,
   textAnalysisChat,
   uploadFile,
   type SessionTextAnalysis,
@@ -295,6 +313,8 @@ const previewVisible = ref(false)
 const previewFile = ref<WorkspaceFileItem | null>(null)
 const uploaderRef = ref<HTMLInputElement>()
 const uploading = ref(false)
+/** 文件清单对账（刷新）进行中 */
+const syncingFiles = ref(false)
 const chatAreaRef = ref<HTMLElement>()
 
 const currentWorkspace = computed<WorkspaceSubDir | null>(
@@ -469,6 +489,34 @@ async function doDownload(f: WorkspaceFileItem) {
     await downloadFile(f.fileId)
   } catch {
     // 已提示
+  }
+}
+
+/**
+ * 文件清单对账（刷新）：磁盘 ↔ 数据库一致性同步。
+ * 磁盘上有新文件（如 Agent 异常/断流未走 onComplete 同步的产物、外部放入的受控文件）→ 登记入库；
+ * 数据库有记录但磁盘已缺失 → 删除对应表记录。完成后重拉文件树并反馈结果。
+ */
+async function handleRefreshFiles() {
+  if (!currentWsId.value || running.value) return
+  if (syncingFiles.value) return
+  syncingFiles.value = true
+  try {
+    const result = await reconcileFiles(currentWsId.value)
+    files.value = await listFiles(currentWsId.value)
+    if (result.addedCount > 0 && result.removedCount > 0) {
+      ElMessage.success(`刷新完成：新增 ${result.addedCount} 个文件，清理 ${result.removedCount} 个缺失记录`)
+    } else if (result.addedCount > 0) {
+      ElMessage.success(`刷新完成：新增 ${result.addedCount} 个文件`)
+    } else if (result.removedCount > 0) {
+      ElMessage.warning(`刷新完成：磁盘缺失已清理 ${result.removedCount} 条记录${result.removedNames.length ? `（${result.removedNames.join('、')}）` : ''}`)
+    } else {
+      ElMessage.success('文件清单已是最新')
+    }
+  } catch {
+    // 拦截器已提示
+  } finally {
+    syncingFiles.value = false
   }
 }
 
@@ -833,6 +881,14 @@ onBeforeUnmount(() => {
   background: var(--el-fill-color-lighter);
 }
 
+/* 文件树表头操作区：刷新 + 上传按钮横向排列 */
+.fa-file-head-ops {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
 .fa-ws-list,
 .fa-file-list {
   flex: 1;
@@ -1152,15 +1208,30 @@ onBeforeUnmount(() => {
 .fa-input-main {
   flex: 1;
   min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+/* 让 textarea 容器链逐层撑满，避免只撑满 inner 而外层仍按内容高度收缩 */
+.fa-input-main :deep(.el-textarea) {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
 }
 
 .fa-input-main :deep(.el-textarea__inner) {
-  height: 100% !important;
+  flex: 1;
+  width: 100%;
 }
 
+/* 发送按钮作为 flex 子项 stretch 到与输入框等高，内部 flex 居中 */
 .fa-send-btn {
   flex-shrink: 0;
   width: 92px;
+  height: 100% !important;
   margin-left: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 </style>

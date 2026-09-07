@@ -32,8 +32,11 @@ import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 /**
@@ -194,7 +197,15 @@ public class WorkspaceFileServiceImpl
                             meta.setFileName(name);
                             meta.setFileType(ext);
                             meta.setFileSize(Files.size(p));
-                            // 渲染产物按轻量化策略暂不做二次 ai-tool-doc 解析，留空由下载/预览兜底
+                            // 文本类产物直接读取正文作为预解析内容，供前端 Markdown 预览
+                            //（与上传 parseAndFill / 对账补齐策略保持一致；渲染产物特指 .md/.txt/.json 等纯文本）
+                            if (isPlainTextExt(ext)) {
+                                try {
+                                    meta.setParsedMarkdown(Files.readString(p, StandardCharsets.UTF_8));
+                                } catch (IOException readEx) {
+                                    log.debug("同步渲染产物文本直读失败(留空预览): {} -> {}", p, readEx.getMessage());
+                                }
+                            }
                             save(meta);
                             existingNames.add(name);
                             created.add(meta);
@@ -207,6 +218,97 @@ public class WorkspaceFileServiceImpl
             log.warn("同步 Agent 渲染产物目录扫描失败: {}", e.getMessage());
         }
         return created;
+    }
+
+    @Override
+    @Transactional
+    public ReconcileResult reconcileFiles(String empNo, String subDirId) {
+        WorkspaceSubDir ws = assertOwned(empNo, subDirId);
+        Path baseDir = Path.of(ws.getAbsPath()).toAbsolutePath().normalize();
+        int removed = 0;
+        List<String> removedNames = new ArrayList<>();
+
+        // 0) 物理目录整个缺失 → 数据库记录全部失效，级联清除
+        if (!Files.isDirectory(baseDir)) {
+            List<String> orphans = list(new LambdaQueryWrapper<WorkspaceFile>()
+                            .eq(WorkspaceFile::getSubDirId, subDirId)
+                            .select(WorkspaceFile::getFileName))
+                    .stream().map(WorkspaceFile::getFileName).toList();
+            remove(new LambdaQueryWrapper<WorkspaceFile>()
+                    .eq(WorkspaceFile::getSubDirId, subDirId));
+            removed = orphans.size();
+            removedNames.addAll(orphans);
+            log.info("文件清单对账: 工作区物理目录缺失, 清理全部记录 subDirId={}, removed={}", subDirId, removed);
+            return new ReconcileResult(0, removed, removedNames);
+        }
+
+        // 1) 补齐：磁盘存在但数据库缺失的受控文件 → 登记入库（文本类直读预解析）
+        Set<String> dbNames = new HashSet<>(list(new LambdaQueryWrapper<WorkspaceFile>()
+                        .eq(WorkspaceFile::getSubDirId, subDirId)
+                        .select(WorkspaceFile::getFileName))
+                .stream().map(WorkspaceFile::getFileName).toList());
+        List<String> addedNames = new ArrayList<>();
+        try (Stream<Path> walk = Files.walk(baseDir)) {
+            walk.filter(Files::isRegularFile)
+                    // 跳过 SDK 临时落盘目录
+                    .filter(p -> !p.startsWith(baseDir.resolve("temp")))
+                    .forEach(p -> {
+                        try {
+                            String name = p.getFileName().toString();
+                            String ext = extOf(name);
+                            if (!GENERATED_EXT.contains(ext) || dbNames.contains(name)) {
+                                return;
+                            }
+                            WorkspaceFile meta = new WorkspaceFile();
+                            meta.setFileId(UUID.randomUUID().toString());
+                            meta.setSubDirId(subDirId);
+                            meta.setFileName(name);
+                            meta.setFileType(ext);
+                            meta.setFileSize(Files.size(p));
+                            // 文本类直接读正文，与上传预解析策略保持一致
+                            if (isPlainTextExt(ext)) {
+                                meta.setParsedMarkdown(Files.readString(p, StandardCharsets.UTF_8));
+                            }
+                            save(meta);
+                            dbNames.add(name);
+                            addedNames.add(name);
+                            log.info("文件清单对账[补齐入库]: subDirId={}, name={}", subDirId, name);
+                        } catch (IOException e) {
+                            log.debug("文件清单对账跳过: {} -> {}", p, e.getMessage());
+                        }
+                    });
+        } catch (IOException e) {
+            log.warn("文件清单对账目录扫描失败: {}", e.getMessage());
+        }
+        int added = addedNames.size();
+
+        // 2) 清理：数据库有记录但磁盘文件已缺失 → 删除表记录
+        Map<String, WorkspaceFile> metaByName = list(new LambdaQueryWrapper<WorkspaceFile>()
+                        .eq(WorkspaceFile::getSubDirId, subDirId)
+                        .select(WorkspaceFile::getFileId, WorkspaceFile::getFileName, WorkspaceFile::getParsedMarkdown))
+                .stream()
+                .collect(Collectors.toMap(WorkspaceFile::getFileName, Function.identity(), (a, b) -> a));
+        for (Map.Entry<String, WorkspaceFile> entry : metaByName.entrySet()) {
+            try {
+                Path physical = resolvePhysicalPath(entry.getValue());
+                if (!Files.isRegularFile(physical)) {
+                    removeById(entry.getValue().getFileId());
+                    removed++;
+                    removedNames.add(entry.getKey());
+                    log.info("文件清单对账[清理失配记录]: fileId={}, name={} 磁盘缺失",
+                            entry.getValue().getFileId(), entry.getKey());
+                } else if (isPlainTextExt(extOf(entry.getKey())) && entry.getValue().getParsedMarkdown() == null) {
+                    // 存量文本类文件回填预解析正文：兼容早期 Agent 渲染产物注册时未预解析的历史数据，
+                    // 用户点击文件树「刷新」即可一次性补齐，使 Markdown 预览立即可用。
+                    entry.getValue().setParsedMarkdown(Files.readString(physical, StandardCharsets.UTF_8));
+                    updateById(entry.getValue());
+                    log.info("文件清单对账[文本回填]: name={} 已补充 parsed_markdown", entry.getKey());
+                }
+            } catch (Exception e) {
+                log.warn("文件清单对账校验跳过: {} -> {}", entry.getKey(), e.getMessage());
+            }
+        }
+        return new ReconcileResult(added, removed, removedNames);
     }
 
     // ==================== 内部逻辑 ====================
@@ -293,5 +395,10 @@ public class WorkspaceFileServiceImpl
     private String extOf(String fileName) {
         int dot = fileName.lastIndexOf('.');
         return dot >= 0 ? fileName.substring(dot + 1).toUpperCase(Locale.ROOT) : "";
+    }
+
+    /** 纯文本类扩展名：txt/md/markdown/json（预解析可直接读取正文）。 */
+    private boolean isPlainTextExt(String ext) {
+        return "TXT".equals(ext) || "MD".equals(ext) || "MARKDOWN".equals(ext) || "JSON".equals(ext);
     }
 }

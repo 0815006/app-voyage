@@ -145,6 +145,12 @@ public class FileAnalysisController {
         return Result.ok();
     }
 
+    /** 文件清单对账（刷新）：磁盘↔数据库双向往返同步，补齐新生成产物、清理磁盘缺失的失配记录。 */
+    @PostMapping("/workspace/{subDirId}/files/reconcile")
+    public Result<WorkspaceFileService.ReconcileResult> reconcileFiles(@PathVariable("subDirId") String subDirId) {
+        return Result.ok(fileService.reconcileFiles(EmpContext.getEmpNo(), subDirId));
+    }
+
     // ==================== SSE 文件分析对话 ====================
 
     /**
