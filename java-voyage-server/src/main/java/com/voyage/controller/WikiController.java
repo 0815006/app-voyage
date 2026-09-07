@@ -15,6 +15,10 @@ import java.util.List;
 
 /**
  * Wiki 管理 Controller。
+ * <p>
+ * 完全按人隔离：所有端点统一从 {@link EmpContext#getEmpNo()} 取当前操作者工号，
+ * 传入 Service 作为归属过滤/校验依据，请求体中的归属字段一律被忽略。
+ * </p>
  */
 @Slf4j
 @RestController
@@ -25,78 +29,86 @@ public class WikiController {
     private final WikiDocumentService wikiDocumentService;
 
     /**
-     * 获取完整目录树。
+     * 获取当前操作者名下的完整目录树。
      */
     @GetMapping("/tree")
     public Result<List<WikiNodeVO>> getTree() {
-        log.info("[{}] 请求 Wiki 目录树", EmpContext.getEmpNo());
-        return Result.ok(wikiDocumentService.buildWikiTree());
+        String empNo = EmpContext.getEmpNo();
+        log.info("[{}] 请求 Wiki 目录树", empNo);
+        return Result.ok(wikiDocumentService.buildWikiTree(empNo));
     }
 
     /**
-     * 根据 ID 获取文档详情。
+     * 根据 ID 获取当前操作者名下文档详情。
      */
     @GetMapping("/{id}")
     public Result<WikiDocument> getById(@PathVariable String id) {
-        log.info("[{}] 请求 Wiki 文档详情: id={}", EmpContext.getEmpNo(), id);
-        return Result.ok(wikiDocumentService.getById(id));
+        String empNo = EmpContext.getEmpNo();
+        log.info("[{}] 请求 Wiki 文档详情: id={}", empNo, id);
+        return Result.ok(wikiDocumentService.getById(empNo, id));
     }
 
     /**
-     * 根据标题获取文档（双链跳转专用）。
+     * 根据标题获取当前操作者名下文档（双链跳转专用）。
      */
     @GetMapping("/by-title")
     public Result<WikiDocument> getByTitle(@RequestParam String title) {
-        log.info("[{}] 双链跳转查询: title={}", EmpContext.getEmpNo(), title);
-        return Result.ok(wikiDocumentService.getByTitle(title));
+        String empNo = EmpContext.getEmpNo();
+        log.info("[{}] 双链跳转查询: title={}", empNo, title);
+        return Result.ok(wikiDocumentService.getByTitle(empNo, title));
     }
 
     /**
-     * 创建或更新文档。
+     * 创建或更新当前操作者名下文档。
      */
     @PostMapping("/save")
     public Result<WikiDocument> save(@RequestBody WikiDocument doc) {
-        log.info("[{}] 保存 Wiki 文档: title={}, id={}", EmpContext.getEmpNo(), doc.getTitle(), doc.getId());
-        return Result.ok(wikiDocumentService.saveDoc(doc));
+        String empNo = EmpContext.getEmpNo();
+        log.info("[{}] 保存 Wiki 文档: title={}, id={}", empNo, doc.getTitle(), doc.getId());
+        return Result.ok(wikiDocumentService.saveDoc(empNo, doc));
     }
 
     /**
-     * 删除文档及子节点。
+     * 删除当前操作者名下文档及子节点。
      */
     @DeleteMapping("/{id}")
     public Result<Void> delete(@PathVariable String id) {
-        log.info("[{}] 删除 Wiki 节点: id={}", EmpContext.getEmpNo(), id);
-        wikiDocumentService.deleteById(id);
+        String empNo = EmpContext.getEmpNo();
+        log.info("[{}] 删除 Wiki 节点: id={}", empNo, id);
+        wikiDocumentService.deleteById(empNo, id);
         return Result.ok();
     }
 
     /**
-     * 移动节点到指定父节点和排序位置。
+     * 移动当前操作者名下节点到指定父节点和排序位置。
      */
     @PutMapping("/{id}/move")
     public Result<Void> moveNode(@PathVariable String id, @RequestBody MoveNodeDTO dto) {
+        String empNo = EmpContext.getEmpNo();
         log.info("[{}] 移动 Wiki 节点: id={} -> parentId={}, sortOrder={}",
-                EmpContext.getEmpNo(), id, dto.getNewParentId(), dto.getNewSortOrder());
-        wikiDocumentService.moveNode(id, dto.getNewParentId(), dto.getNewSortOrder());
+                empNo, id, dto.getNewParentId(), dto.getNewSortOrder());
+        wikiDocumentService.moveNode(empNo, id, dto.getNewParentId(), dto.getNewSortOrder());
         return Result.ok();
     }
 
     /**
-     * 批量更新同级节点排序。
+     * 批量更新当前操作者名下同级节点排序。
      */
     @PutMapping("/sort-batch")
     public Result<Void> batchUpdateSortOrder(@RequestBody SortOrderDTO dto) {
-        log.info("[{}] 批量更新 Wiki 排序: {} 个节点", EmpContext.getEmpNo(), dto.getItems().size());
-        wikiDocumentService.batchUpdateSortOrder(dto.getItems());
+        String empNo = EmpContext.getEmpNo();
+        log.info("[{}] 批量更新 Wiki 排序: {} 个节点", empNo, dto.getItems().size());
+        wikiDocumentService.batchUpdateSortOrder(empNo, dto.getItems());
         return Result.ok();
     }
 
     /**
-     * 获取指定文件夹的直接子节点（不递归）。
+     * 获取当前操作者名下指定文件夹的直接子节点（不递归）。
      */
     @GetMapping("/{folderId}/children")
     public Result<List<WikiNodeVO>> getChildren(@PathVariable String folderId) {
-        log.info("[{}] 获取文件夹子节点: folderId={}", EmpContext.getEmpNo(), folderId);
-        return Result.ok(wikiDocumentService.getChildrenById(folderId));
+        String empNo = EmpContext.getEmpNo();
+        log.info("[{}] 获取文件夹子节点: folderId={}", empNo, folderId);
+        return Result.ok(wikiDocumentService.getChildrenById(empNo, folderId));
     }
 }

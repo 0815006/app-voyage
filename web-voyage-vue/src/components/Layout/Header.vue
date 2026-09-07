@@ -32,7 +32,7 @@
 <script setup lang="ts">
 import { ref, nextTick } from 'vue'
 import { ElMessage } from 'element-plus'
-import { getCurrentEmpNo, setCurrentEmpNo, isEmpNoValid } from '@/utils/currentUser'
+import { getCurrentEmpNo, setCurrentEmpNo, clearCurrentEmpNo, isEmpNoValid } from '@/utils/currentUser'
 
 const empNo = ref<string>(getCurrentEmpNo())
 const isEditing = ref<boolean>(false)
@@ -52,8 +52,8 @@ function confirmEdit() {
   const trimmed = inputValue.value.trim()
 
   if (!trimmed) {
-    // 允许清空工号
-    localStorage.removeItem('voyage_emp_no')
+    // 允许清空工号（统一走 clearCurrentEmpNo 以广播工号变更事件）
+    clearCurrentEmpNo()
     empNo.value = ''
     isEditing.value = false
     return

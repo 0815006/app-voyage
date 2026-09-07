@@ -19,6 +19,8 @@ export interface WikiDocument {
   content: string
   type: number
   parentId: string
+  /** 归属操作员工号(7位，READ_ONLY，仅后端注入，前端只读展示/不上送) */
+  empNo?: string
   sortOrder?: number
   createTime?: string
   updateTime?: string

@@ -61,6 +61,12 @@ const routes: RouteRecordRaw[] = [
         component: () => import('@/views/DbAnalysis.vue'),
         meta: { title: '数据库性能分析' },
       },
+      {
+        path: 'file-analysis',
+        name: 'FileAnalysis',
+        component: () => import('@/views/FileAnalysis.vue'),
+        meta: { title: '文件分析' },
+      },
     ],
   },
 ]

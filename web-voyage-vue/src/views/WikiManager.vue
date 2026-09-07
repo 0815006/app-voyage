@@ -287,6 +287,7 @@ import { ref, computed, watch, nextTick, onMounted, onBeforeUnmount } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { MdEditor, MdPreview } from 'md-editor-v3'
 import 'md-editor-v3/lib/style.css'
+import { EMP_NO_CHANGED_EVENT, getCurrentEmpNo } from '@/utils/currentUser'
 import {
   Search,
   Refresh,
@@ -409,7 +410,35 @@ const refreshTree = async () => {
   ElMessage.success('目录树已刷新')
 }
 
+// ==================== 工号切换：完全按人隔离 ====================
+// Wiki 文档已按归属员工号(emp_no)隔离，切换工号后必须立即刷新本人目录树，
+// 并清空上一操作者残留的内存文档/文件夹，防止跨人数据短暂可见。
+
+let currentEmpNo = ''
+
+const handleEmpNoChanged = () => {
+  const newEmpNo = getCurrentEmpNo()
+  if (newEmpNo === currentEmpNo) {
+    // 工号未变化（如首次进入时的历史广播），仅需确保树已加载
+    if (!wikiTreeData.value.length) {
+      loadTree()
+    }
+    return
+  }
+  currentEmpNo = newEmpNo
+  // 清空上一操作者的内存状态
+  currentDoc.value = { title: '', content: '', type: 2, parentId: '0' }
+  currentFolder.value = null
+  folderChildren.value = []
+  isEditing.value = false
+  dialogVisible.value = false
+  ;(treeRef.value as { setCurrentKey: (id: string) => void } | null)?.setCurrentKey('')
+  loadTree()
+}
+
 onMounted(() => {
+  currentEmpNo = getCurrentEmpNo()
+  window.addEventListener(EMP_NO_CHANGED_EVENT, handleEmpNoChanged)
   loadTree()
 })
 
@@ -417,6 +446,7 @@ onBeforeUnmount(() => {
   document.removeEventListener('mousemove', onDragMove)
   document.removeEventListener('mouseup', onDragEnd)
   document.body.style.cursor = ''
+  window.removeEventListener(EMP_NO_CHANGED_EVENT, handleEmpNoChanged)
 })
 
 // ==================== 搜索过滤 ====================

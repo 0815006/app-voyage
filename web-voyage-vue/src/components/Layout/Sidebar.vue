@@ -67,6 +67,10 @@
         <el-icon><DataAnalysis /></el-icon>
         <template #title>数据库性能分析</template>
       </el-menu-item>
+      <el-menu-item index="/file-analysis">
+        <el-icon><Files /></el-icon>
+        <template #title>文件分析</template>
+      </el-menu-item>
 
     </el-menu>
   </aside>
@@ -75,7 +79,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useRoute } from 'vue-router'
-import { Monitor, Document, Search, TrendCharts, Setting, Collection, ChatDotRound, Cpu, DataAnalysis } from '@element-plus/icons-vue'
+import { Monitor, Document, Search, TrendCharts, Setting, Collection, ChatDotRound, Cpu, DataAnalysis, Files } from '@element-plus/icons-vue'
 
 const props = defineProps<{
   collapsed: boolean
