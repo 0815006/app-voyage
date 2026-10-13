@@ -49,7 +49,7 @@
       </el-menu-item>
       <el-menu-item index="/wiki">
         <el-icon><Collection /></el-icon>
-        <template #title>Wiki在线</template>
+        <template #title>公共Wiki</template>
       </el-menu-item>
       <el-menu-item index="/resource-check">
         <el-icon><Search /></el-icon>

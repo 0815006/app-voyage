@@ -115,8 +115,40 @@ public class PerformanceResourceInfoService extends ServiceImpl<PerformanceResou
         List<PerformanceResourceInfo> dataList = new ArrayList<>();
         Date date = new Date();
 
-        // 跳过标题行，从第二行开始读取
-        for (int i = 1; i <= sheet.getLastRowNum(); i++) {
+        // 兼容新旧模板：
+        // - 旧模板：第 1 行（索引 0）是表头标题行，数据从第 2 行（索引 1）开始；
+        // - 新模板：在旧表头行之前新增了一行标识行（首列内容为"是否新格式"），
+        //           数据整体下移一行，需跳过 2 行，从第 3 行（索引 2）开始。
+        int startRow = 1;
+        Row headerProbeRow = sheet.getRow(0);
+        String headerFirstCell = headerProbeRow != null
+                ? getStringCellValue(headerProbeRow.getCell(0))
+                : null;
+        String firstCellText = headerFirstCell == null ? "" : headerFirstCell.trim();
+
+        // 判据一：新模板首行首列为标识文字"是否新格式"
+        boolean isNewFormat = firstCellText.contains("是否新格式");
+        // 判据二（兜底）：首行首列为空（如合并单元格导致取值落空），
+        //                 但第二行首列被识别为表头"id"，同样认定为新模板
+        if (!isNewFormat && firstCellText.isEmpty()) {
+            Row secondRow = sheet.getRow(1);
+            String secondFirstCell = secondRow != null
+                    ? getStringCellValue(secondRow.getCell(0))
+                    : null;
+            if (secondFirstCell != null && "id".equalsIgnoreCase(secondFirstCell.trim())) {
+                isNewFormat = true;
+            }
+        }
+        if (isNewFormat) {
+            startRow = 2;
+        }
+        log.info("资源导入 [{}] 识别到{}模板，数据起始行索引={}",
+                "资源申请表".equals(fileSource) ? "资源申请表" : "部署方案",
+                startRow == 2 ? "新" : "旧",
+                startRow);
+
+        // 从数据起始行开始读取（自动兼容：旧模板跳过 1 行，新模板跳过 2 行）
+        for (int i = startRow; i <= sheet.getLastRowNum(); i++) {
             Row row = sheet.getRow(i);
             if (row == null) continue;
 
