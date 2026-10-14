@@ -9,14 +9,18 @@ echo ==================================================
 echo.
 
 :: ========== 📌 内网部署参数（按需修改） ==========
-set "DB_HOST=22.188.9.144"
-set "DB_PORT=3306"
+set "DB_HOST=localhost"
+set "DB_PORT=5432"
 set "DB_USER=root"
-set "DB_PASSWORD=Star002!"
+set "DB_PASSWORD=Google01!postgresql"
 set "DB_NAME=voyage_db"
 set "FILE_STORAGE_PATH=D:\data\voyage"
 set "SERVER_PORT=8098"
 set "DEPLOY_DIR=D:\app\voyage-server"
+:: --- AI SDK 配置 ---
+set "AI_BASE_URL=http://22.189.54.139/aicoding/api/v1"
+set "AI_API_KEY=82cdcb44-56a8-4edb-9474-08e49de9ab37"
+set "AI_MODEL=Qwen3.5"
 :: ====================================================
 
 :: 切到项目根目录
@@ -45,6 +49,8 @@ echo    DB: %DB_HOST%:%DB_PORT%/%DB_NAME%
 echo    File Storage: %FILE_STORAGE_PATH%
 echo    Server Port: %SERVER_PORT%
 echo    Deploy Dir:  %DEPLOY_DIR%
+echo    AI Base URL: %AI_BASE_URL%
+echo    AI Model:    %AI_MODEL%
 echo.
 
 :: ========== Step 2: Maven 编译打包 ==========
@@ -111,6 +117,9 @@ echo   ^<env name="DB_USER" value="%DB_USER%"/^>
 echo   ^<env name="DB_PASSWORD" value="%DB_PASSWORD%"/^>
 echo   ^<env name="FILE_STORAGE_PATH" value="%FILE_STORAGE_PATH%"/^>
 echo   ^<env name="SERVER_PORT" value="%SERVER_PORT%"/^>
+echo   ^<env name="AI_BASE_URL" value="%AI_BASE_URL%"/^>
+echo   ^<env name="AI_API_KEY" value="%AI_API_KEY%"/^>
+echo   ^<env name="AI_MODEL" value="%AI_MODEL%"/^>
 echo   ^<log mode="roll-by-size"^>
 echo     ^<sizeThreshold^>10240^</sizeThreshold^>
 echo     ^<keepFiles^>8^</keepFiles^>
@@ -166,6 +175,8 @@ echo.
 echo echo ==========================================
 echo echo   ✅ Voyage Server 服务已启动
 echo echo   访问: http://localhost:%SERVER_PORT%/api/health
+echo echo   AI Base URL: %AI_BASE_URL%
+echo echo   AI Model:    %AI_MODEL%
 echo echo ==========================================
 echo pause
 ) > "%OUT_DIR%\startServer.bat"

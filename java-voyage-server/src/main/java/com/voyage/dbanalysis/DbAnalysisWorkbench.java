@@ -128,7 +128,7 @@ public class DbAnalysisWorkbench {
                         .systemPrompt(systemPrompt)
                         .userPrompt(prompt + composeHistory(historyContext))
                         .tools(registry.getAll())
-                        .maxSteps(10)
+                        .maxSteps(50)
                         .listener(new AgentEventListener() {
                             @Override
                             public void onStepStart(int step) {
