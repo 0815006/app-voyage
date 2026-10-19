@@ -11,10 +11,10 @@ echo.
 :: ========== 📌 内网部署参数（按需修改） ==========
 set "DB_HOST=localhost"
 set "DB_PORT=5432"
-set "DB_USER=root"
-set "DB_PASSWORD=Google01!postgresql"
 set "DB_NAME=voyage_db"
-set "FILE_STORAGE_PATH=D:\data\voyage"
+set "DB_USER=root"
+set "DB_PASS=Google01!postgresql"
+set "DATA_ROOT=D:\data\voyage"
 set "SERVER_PORT=8098"
 set "DEPLOY_DIR=D:\app\voyage-server"
 :: --- AI SDK 配置 ---
@@ -46,7 +46,7 @@ echo.
 
 echo 📌 内网部署参数:
 echo    DB: %DB_HOST%:%DB_PORT%/%DB_NAME%
-echo    File Storage: %FILE_STORAGE_PATH%
+echo    Data Root: %DATA_ROOT%
 echo    Server Port: %SERVER_PORT%
 echo    Deploy Dir:  %DEPLOY_DIR%
 echo    AI Base URL: %AI_BASE_URL%
@@ -113,9 +113,10 @@ echo   ^<arguments^>-Xms256m -Xmx512m -jar voyage-server.jar^</arguments^>
 echo   ^<workingdirectory^>%DEPLOY_DIR:\=\\%^</workingdirectory^>
 echo   ^<env name="DB_HOST" value="%DB_HOST%"/^>
 echo   ^<env name="DB_PORT" value="%DB_PORT%"/^>
+echo   ^<env name="DB_NAME" value="%DB_NAME%"/^>
 echo   ^<env name="DB_USER" value="%DB_USER%"/^>
-echo   ^<env name="DB_PASSWORD" value="%DB_PASSWORD%"/^>
-echo   ^<env name="FILE_STORAGE_PATH" value="%FILE_STORAGE_PATH%"/^>
+echo   ^<env name="DB_PASS" value="%DB_PASS%"/^>
+echo   ^<env name="DATA_ROOT" value="%DATA_ROOT%"/^>
 echo   ^<env name="SERVER_PORT" value="%SERVER_PORT%"/^>
 echo   ^<env name="AI_BASE_URL" value="%AI_BASE_URL%"/^>
 echo   ^<env name="AI_API_KEY" value="%AI_API_KEY%"/^>
@@ -175,6 +176,8 @@ echo.
 echo echo ==========================================
 echo echo   ✅ Voyage Server 服务已启动
 echo echo   访问: http://localhost:%SERVER_PORT%/api/health
+echo echo   DB: %DB_HOST%:%DB_PORT%/%DB_NAME%
+echo echo   Data Root: %DATA_ROOT%
 echo echo   AI Base URL: %AI_BASE_URL%
 echo echo   AI Model:    %AI_MODEL%
 echo echo ==========================================
