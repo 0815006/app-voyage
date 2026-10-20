@@ -123,7 +123,7 @@ public final class AgentToolSet {
                 String targetAlias,
                 @ToolParam(description = "只读 SQL 语句（SELECT/SHOW/DESCRIBE/EXPLAIN），自动 LIMIT 防全表扫描", required = true)
                 String sqlQuery,
-                @ToolParam(description = "最大返回行数（可选，受全局上限约束，默认 100）", required = false)
+                @ToolParam(description = "最大返回行数（可选，受服务端全局上限约束，默认上限 2000，可通过配置 db-analysis.max-rows 调整）", required = false)
                 Integer maxRows
         ) {
         }

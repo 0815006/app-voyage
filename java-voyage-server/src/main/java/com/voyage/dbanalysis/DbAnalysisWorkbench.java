@@ -17,6 +17,7 @@ import com.voyage.common.EmpContext;
 import com.voyage.entity.SessionDbAnalysis;
 import com.voyage.service.SessionDbAnalysisService;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
@@ -55,6 +56,14 @@ public class DbAnalysisWorkbench {
     private final SchemaGenerator schemaGenerator;
     private final SessionDbAnalysisService sessionService;
 
+    /** 只读探查最大返回行数（覆盖 SDK 默认 100，防大结果集分析被静默截断） */
+    @Value("${db-analysis.max-rows:2000}")
+    private int maxRows;
+
+    /** 语句级查询超时（秒），随行数上限相应放宽（SDK 默认 10s） */
+    @Value("${db-analysis.query-timeout-seconds:30}")
+    private int queryTimeoutSeconds;
+
     public DbAnalysisWorkbench(AgentRunner agentRunner,
                                SchemaGenerator schemaGenerator,
                                SessionDbAnalysisService sessionService) {
@@ -84,7 +93,7 @@ public class DbAnalysisWorkbench {
         emitter.onError(e -> emitterClosed.set(true));
 
         Thread.startVirtualThread(() -> {
-            SessionBoundDbManager manager = new SessionBoundDbManager();
+            SessionBoundDbManager manager = new SessionBoundDbManager(maxRows, queryTimeoutSeconds);
             ActiveRunContext context = new ActiveRunContext();
             context.emitterRef = emitterRef;
             context.emitterClosed = emitterClosed;

@@ -1,6 +1,7 @@
 package com.voyage.dbanalysis;
 
 import com.realapex.tool.contract.AgentTool;
+import com.realapex.tool.db.config.DbToolConfig;
 import com.realapex.tool.db.config.DbToolFactory;
 import com.realapex.tool.db.dialect.DbDialect;
 import com.realapex.tool.db.dialect.DbDialectFactory;
@@ -42,6 +43,33 @@ public final class SessionBoundDbManager implements AutoCloseable {
     private final Map<String, DbToolSet> toolSetMap = new ConcurrentHashMap<>();
 
     /**
+     * 只读查询最大返回行数（受服务端配置约束，覆盖 SDK 默认 100）。
+     * <=0 时沿用 SDK 默认值。
+     */
+    private final int maxRows;
+
+    /**
+     * 语句级查询超时（秒），覆盖 SDK 默认 10s。<=0 时沿用 SDK 默认值。
+     */
+    private final int queryTimeoutSeconds;
+
+    /** 使用 SDK 默认行数/超时卡口构造。 */
+    public SessionBoundDbManager() {
+        this(0, 0);
+    }
+
+    /**
+     * 以服务端配置的行数/超时卡口构造。
+     *
+     * @param maxRows             只读查询最大返回行数（&lt;=0 表示沿用 SDK 默认 100）
+     * @param queryTimeoutSeconds 语句级查询超时秒数（&lt;=0 表示沿用 SDK 默认 10s）
+     */
+    public SessionBoundDbManager(int maxRows, int queryTimeoutSeconds) {
+        this.maxRows = maxRows;
+        this.queryTimeoutSeconds = queryTimeoutSeconds;
+    }
+
+    /**
      * 依据前端勾选列表初始化会话级连接池（模式 A：外部注入 DataSource 给 SDK 工具）。
      *
      * @param configs 前端勾选的数据库连接配置（含临时密码）
@@ -55,7 +83,8 @@ public final class SessionBoundDbManager implements AutoCloseable {
             String jdbcUrl = buildJdbcUrl(cfg);
             DataSource ds = buildDataSource(jdbcUrl, cfg.user(), cfg.password(), cfg.dialect());
             DbDialect dialect = DbDialectFactory.create(cfg.dialect());
-            List<AgentTool<?, ?>> tools = DbToolFactory.createDbTools(ds, dialect);
+            DbToolConfig toolConfig = buildToolConfig(ds, dialect);
+            List<AgentTool<?, ?>> tools = DbToolFactory.createDbTools(toolConfig);
 
             dataSourceMap.put(cfg.alias(), ds);
             toolSetMap.put(cfg.alias(), new DbToolSet(tools));
@@ -130,6 +159,27 @@ public final class SessionBoundDbManager implements AutoCloseable {
     }
 
     // ==================== 私有工具方法 ====================
+
+    /**
+     * 构建 SDK 工具配置：在模式 A（外部注入 DataSource）基础上，
+     * 按服务端配置覆盖只读查询行数与语句级超时卡口（未配置则沿用 SDK 默认）。
+     *
+     * @param ds      会话级数据源
+     * @param dialect 数据库方言
+     * @return SDK 工具配置
+     */
+    private DbToolConfig buildToolConfig(DataSource ds, DbDialect dialect) {
+        DbToolConfig.DbToolConfigBuilder builder = DbToolConfig.builder()
+                .dataSource(ds)
+                .dialect(dialect);
+        if (maxRows > 0) {
+            builder.maxRows(maxRows);
+        }
+        if (queryTimeoutSeconds > 0) {
+            builder.queryTimeoutSeconds(queryTimeoutSeconds);
+        }
+        return builder.build();
+    }
 
     private String renderTableSchema(TableSchema ts) {
         StringBuilder sb = new StringBuilder();

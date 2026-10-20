@@ -68,6 +68,13 @@ performance:
   template-path: "${app.data-root}/uploads/performance/templates/"
   doc-path: "${app.data-root}/uploads/performance/docs/"
 
+# 数据库性能分析（DB Analysis）：只读探查的行数/超时卡口
+db-analysis:
+  # 单次只读查询最大返回行数（SDK 默认 100，过小会截断大结果集分析）
+  max-rows: ${DB_ANALYSIS_MAX_ROWS:2000}
+  # 语句级查询超时（秒），行数放大后相应放宽（SDK 默认 10s）
+  query-timeout-seconds: ${DB_ANALYSIS_QUERY_TIMEOUT_SECONDS:30}
+
 meta:
   max-file-lines: 2000
   storage:
