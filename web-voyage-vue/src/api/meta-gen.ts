@@ -55,7 +55,7 @@ export interface FtpConfig {
   id?: string
   host?: string
   port?: number
-  username?: string
+  ftpUser?: string
   [key: string]: unknown
 }
 

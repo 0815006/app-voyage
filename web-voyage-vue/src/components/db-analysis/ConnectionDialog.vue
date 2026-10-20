@@ -77,12 +77,12 @@
         </el-form-item>
 
         <el-form-item label="用户名" required>
-          <el-input v-model="form.user" placeholder="只读账号更安全" />
+          <el-input v-model="form.dbUser" placeholder="只读账号更安全" />
         </el-form-item>
 
         <el-form-item label="密码" :required="!isEditingExisting">
           <el-input
-            v-model="form.password"
+            v-model="form.dbPass"
             type="password"
             show-password
             :placeholder="isEditingExisting ? '不修改请留空，后端保留原密文' : '将加密存储于服务端'"
@@ -154,8 +154,8 @@ const emptyForm = (): DbConnectionConfig => ({
   host: '',
   port: 3306,
   dbName: '',
-  user: '',
-  password: '',
+  dbUser: '',
+  dbPass: '',
 })
 
 const form = reactive<DbConnectionConfig>(emptyForm())
@@ -183,7 +183,7 @@ function startEdit(conn?: DbConnectionConfig) {
     editingAlias.value = conn.alias
     editingOrigin.value = { ...conn }
     // 列表中的连接不含密码（脱敏），编辑时置空让用户决定是否改密
-    Object.assign(form, { ...conn, password: '' })
+    Object.assign(form, { ...conn, dbPass: '' })
   } else {
     editingAlias.value = '__new__'
     editingOrigin.value = null
@@ -210,11 +210,11 @@ function validateForm(): boolean {
     ElMessage.warning('请填写数据库名')
     return false
   }
-  if (!form.user.trim()) {
+  if (!form.dbUser.trim()) {
     ElMessage.warning('请填写用户名')
     return false
   }
-  if (!isEditingExisting.value && !form.password) {
+  if (!isEditingExisting.value && !form.dbPass) {
     ElMessage.warning('新建连接必须填写密码（加密存储于服务端）')
     return false
   }
@@ -233,8 +233,8 @@ function toPayload(src: DbConnectionConfig): DbConnectionConfig {
     host: src.host,
     port: src.port,
     dbName: src.dbName,
-    user: src.user,
-    password: src.password || '',
+    dbUser: src.dbUser,
+    dbPass: src.dbPass || '',
   }
 }
 

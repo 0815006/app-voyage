@@ -143,7 +143,7 @@ public class MetaGenController {
         try (FileInputStream fis = new FileInputStream(localFile)) {
             int port = ftpConfig.getFtpPort() != null ? ftpConfig.getFtpPort() : 21;
             ftpClient.connect(ftpConfig.getFtpIp(), port);
-            if (!ftpClient.login(ftpConfig.getUsername(), ftpConfig.getPassword())) {
+            if (!ftpClient.login(ftpConfig.getFtpUser(), ftpConfig.getFtpPass())) {
                 return Result.fail("FTP登录失败，请检查用户名密码");
             }
             ftpClient.setFileType(FTP.BINARY_FILE_TYPE);

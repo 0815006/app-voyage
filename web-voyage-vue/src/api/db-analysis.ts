@@ -8,7 +8,7 @@ import { getCurrentEmpNo } from '@/utils/currentUser'
  * 发起分析/测试连接时携带连接 id，由后端自动解密出明文密码（仅存于请求内存）。
  */
 
-/** 数据库连接配置（已保存连接 id 非空且 password 为空，由后端按 id 自动解密） */
+/** 数据库连接配置（已保存连接 id 非空且 dbPass 为空，由后端按 id 自动解密） */
 export interface DbConnectionConfig {
   id?: string
   alias: string
@@ -16,8 +16,8 @@ export interface DbConnectionConfig {
   host: string
   port: number
   dbName: string
-  user: string
-  password: string
+  dbUser: string
+  dbPass: string
 }
 
 /** 会话实体（不含密码） */
@@ -60,7 +60,7 @@ export function listConnections(): Promise<DbConnectionConfig[]> {
 
 /**
  * 新增或更新连接。
- * 新增时 password 必填；编辑时 password 留空表示不修改密码（后端保留原密文）。
+ * 新增时 dbPass 必填；编辑时 dbPass 留空表示不修改密码（后端保留原密文）。
  */
 export function saveConnection(config: DbConnectionConfig): Promise<DbConnectionConfig> {
   return request.post('/db-analysis/connection', config)
@@ -80,7 +80,7 @@ export interface TestConnectionResult {
 
 /**
  * 测试单个数据库连接是否可用。
- * 携带 id（已保存连接）时后端自动解密；临时改配未保存时请连同 password 一起传入。
+ * 携带 id（已保存连接）时后端自动解密；临时改配未保存时请连同 dbPass 一起传入。
  */
 export function testConnection(config: DbConnectionConfig): Promise<TestConnectionResult> {
   return request.post('/db-analysis/test-connection', config)

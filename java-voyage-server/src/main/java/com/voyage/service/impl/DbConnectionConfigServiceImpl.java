@@ -40,8 +40,8 @@ public class DbConnectionConfigServiceImpl
                 .orderByDesc(DbConnectionConfigEntity::getCreateTime));
         // 列表输出脱敏：不携带密文也不携带明文
         list.forEach(e -> {
-            e.setPasswordEnc(null);
-            e.setPassword(null);
+            e.setDbPassEnc(null);
+            e.setDbPass(null);
         });
         return list;
     }
@@ -51,8 +51,8 @@ public class DbConnectionConfigServiceImpl
     public DbConnectionConfigEntity saveConnection(String empNo, DbConnectionConfigEntity entity) {
         // 归属当前操作者
         entity.setEmpNo(empNo);
-        // 密码字段优先取前端回传明文 password
-        String plainPassword = entity.getPassword();
+        // 密码字段优先取前端回传明文 dbPass
+        String plainPassword = entity.getDbPass();
 
         if (entity.getId() == null || entity.getId().isBlank()) {
             // —— 新增 ——
@@ -61,7 +61,7 @@ public class DbConnectionConfigServiceImpl
             }
             checkAliasUnique(empNo, entity.getAlias(), null);
             entity.setId(null); // 交给雪花主键生成
-            entity.setPasswordEnc(crypto.encrypt(plainPassword));
+            entity.setDbPassEnc(crypto.encrypt(plainPassword));
             save(entity);
             log.info("新增数据库连接: id={}, alias={}, dialect={}, empNo={}",
                     entity.getId(), entity.getAlias(), entity.getDialect(), empNo);
@@ -74,9 +74,9 @@ public class DbConnectionConfigServiceImpl
             checkAliasUnique(empNo, entity.getAlias(), entity.getId());
             // 未改密：保留原密文；改密：重新加密
             if (plainPassword == null || plainPassword.isBlank()) {
-                entity.setPasswordEnc(existing.getPasswordEnc());
+                entity.setDbPassEnc(existing.getDbPassEnc());
             } else {
-                entity.setPasswordEnc(crypto.encrypt(plainPassword));
+                entity.setDbPassEnc(crypto.encrypt(plainPassword));
             }
             updateById(entity);
             log.info("更新数据库连接: id={}, alias={}, empNo={}", entity.getId(), entity.getAlias(), empNo);
@@ -101,8 +101,8 @@ public class DbConnectionConfigServiceImpl
         if (existing == null) {
             throw new BusinessException(404, "连接不存在或无权操作");
         }
-        existing.setPassword(crypto.decrypt(existing.getPasswordEnc()));
-        existing.setPasswordEnc(null);
+        existing.setDbPass(crypto.decrypt(existing.getDbPassEnc()));
+        existing.setDbPassEnc(null);
         return existing;
     }
 

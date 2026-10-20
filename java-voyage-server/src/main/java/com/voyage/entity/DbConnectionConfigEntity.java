@@ -15,7 +15,7 @@ import java.time.LocalDateTime;
  * 数据库连接配置实体（db_connection_config）。
  * <p>
  * 数据库性能分析工作台的连接落表管理：按操作员工号(emp_no)隔离，
- * 同一员工号下 alias 唯一。密码以 AES-256-GCM 密文存于 password_enc，
+ * 同一员工号下 alias 唯一。密码以 AES-256-GCM 密文存于 db_pass_enc，
  * 查询返回给前端时由 Service 解密为明文供临时使用（仅内存）。
  * </p>
  */
@@ -49,20 +49,20 @@ public class DbConnectionConfigEntity {
     @JsonProperty("dbName")
     private String dbName;
 
-    /** 用户名（列名 user_name，JSON 键 user 与前端一致） */
-    @TableField("user_name")
-    @JsonProperty("user")
-    private String userName;
+    /** 用户名（列名 db_user，JSON 键 dbUser 与前端一致） */
+    @TableField("db_user")
+    @JsonProperty("dbUser")
+    private String dbUser;
 
     /** 密码 AES-256-GCM 密文（Base64），禁止明文（绝不序列化出参） */
-    @TableField("password_enc")
+    @TableField("db_pass_enc")
     @JsonProperty(access = JsonProperty.Access.WRITE_ONLY)
-    private String passwordEnc;
+    private String dbPassEnc;
 
-    /** 明文密码（瞬态，JSON 键 password）：入参由前端回传，出参仅在需要时由 Controller 手动回填 */
+    /** 明文密码（瞬态，JSON 键 dbPass）：入参由前端回传，出参仅在需要时由 Controller 手动回填 */
     @TableField(exist = false)
-    @JsonProperty("password")
-    private String password;
+    @JsonProperty("dbPass")
+    private String dbPass;
 
     /** 创建时间 */
     private LocalDateTime createTime;

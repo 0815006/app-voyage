@@ -342,7 +342,7 @@ async function handleNewSession() {
       ? JSON.stringify(
           connections.value
             .filter(c => selectedAliases.value.includes(c.alias))
-            .map(({ password: _pwd, ...meta }) => meta)
+            .map(({ dbPass: _pwd, ...meta }) => meta)
         )
       : '[]'
     const session = await createSession(value, selectedMeta)
@@ -486,7 +486,7 @@ async function handleSend() {
   // 暂存会话（若未创建）
   if (!currentSessionId.value) {
     const selectedMeta = JSON.stringify(
-      conns.map(({ password: _pwd, ...meta }) => meta)
+      conns.map(({ dbPass: _pwd, ...meta }) => meta)
     )
     const session = await createSession('数据库性能分析', selectedMeta).catch(() => null)
     if (session) {

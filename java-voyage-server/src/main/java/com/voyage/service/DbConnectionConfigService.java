@@ -33,7 +33,7 @@ public interface DbConnectionConfigService {
      *
      * @param empNo 归属员工号
      * @param id    连接 ID
-     * @return 解密后的连接（password 字段为明文）
+     * @return 解密后的连接（dbPass 字段为明文）
      */
     DbConnectionConfigEntity getDecrypted(String empNo, String id);
 }

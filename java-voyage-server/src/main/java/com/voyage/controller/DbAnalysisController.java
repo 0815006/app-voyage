@@ -118,8 +118,8 @@ public class DbAnalysisController {
     public Result<DbConnectionConfigEntity> saveConnection(@RequestBody DbConnectionConfigEntity entity) {
         DbConnectionConfigEntity saved = connectionService.saveConnection(EmpContext.getEmpNo(), entity);
         // 出参脱敏：不回传明文/密文密码
-        saved.setPassword(null);
-        saved.setPasswordEnc(null);
+        saved.setDbPass(null);
+        saved.setDbPassEnc(null);
         return Result.ok(saved);
     }
 
@@ -205,8 +205,8 @@ public class DbAnalysisController {
             int port = intOf(map.get("port"), saved.getPort() == null ? 3306 : saved.getPort());
             // 兼容 dbName / db_name 双键，均缺省时回退已保存值
             String dbName = orElse(map, "dbName", orElse(map, "db_name", saved.getDbName()));
-            String user = orElse(map, "user", saved.getUserName());
-            String password = orElse(map, "password", saved.getPassword());
+            String user = orElse(map, "dbUser", saved.getDbUser());
+            String password = orElse(map, "dbPass", saved.getDbPass());
             return new DbConnectionConfig(alias, dialect, host, port, dbName, user, password);
         }
         String alias = str(map.get("alias"));
@@ -218,8 +218,8 @@ public class DbAnalysisController {
         if (dbName == null || dbName.isBlank()) {
             dbName = str(map.get("db_name"));
         }
-        String user = str(map.get("user"));
-        String password = str(map.get("password"));
+        String user = str(map.get("dbUser"));
+        String password = str(map.get("dbPass"));
         return new DbConnectionConfig(alias, dialect, host, port, dbName, user, password);
     }
 

@@ -18,9 +18,13 @@ public class MetaFtpConfig {
 
     private Integer ftpPort;
 
-    private String username;
+    /** FTP 用户名（列名 ftp_user，JSON 键 ftpUser） */
+    @TableField("ftp_user")
+    private String ftpUser;
 
-    private String password;
+    /** FTP 密码（列名 ftp_pass，JSON 键 ftpPass） */
+    @TableField("ftp_pass")
+    private String ftpPass;
 
     private String remotePath;
 
