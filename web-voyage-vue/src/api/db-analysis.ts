@@ -6,9 +6,10 @@ import { getCurrentEmpNo } from '@/utils/currentUser'
  * 数据库连接采用「落表管理」：连接配置保存于后端 db_connection_config 表（按操作员工号隔离），
  * 密码以 AES-256-GCM 加密存储，列表/会话仅返回不含密码的脱敏数据；
  * 发起分析/测试连接时携带连接 id，由后端自动解密出明文密码（仅存于请求内存）。
+ * 传输层加密：上行报文中的 dbPass 为 RSA-OAEP 密文（见 utils/transitCrypto），报文不含明文密码。
  */
 
-/** 数据库连接配置（已保存连接 id 非空且 dbPass 为空，由后端按 id 自动解密） */
+/** 数据库连接配置（已保存连接 id 非空且 dbPass 为空，由后端按 id 自动解密；提交前 dbPass 需经 encryptPass 加密） */
 export interface DbConnectionConfig {
   id?: string
   alias: string

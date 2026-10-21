@@ -1,6 +1,7 @@
 package com.voyage.entity;
 
 import com.baomidou.mybatisplus.annotation.*;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.Data;
 
 import java.time.LocalDateTime;
@@ -22,8 +23,9 @@ public class MetaFtpConfig {
     @TableField("ftp_user")
     private String ftpUser;
 
-    /** FTP 密码（列名 ftp_pass，JSON 键 ftpPass） */
+    /** FTP 密码（列名 ftp_pass，JSON 键 ftpPass）：存 GCM 密文；仅接受入参，任何响应不序列化回传 */
     @TableField("ftp_pass")
+    @JsonProperty(value = "ftpPass", access = JsonProperty.Access.WRITE_ONLY)
     private String ftpPass;
 
     private String remotePath;

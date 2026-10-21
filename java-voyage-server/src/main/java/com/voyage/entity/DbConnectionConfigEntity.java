@@ -59,9 +59,9 @@ public class DbConnectionConfigEntity {
     @JsonProperty(access = JsonProperty.Access.WRITE_ONLY)
     private String dbPassEnc;
 
-    /** 明文密码（瞬态，JSON 键 dbPass）：入参由前端回传，出参仅在需要时由 Controller 手动回填 */
+    /** 明文密码（瞬态，JSON 键 dbPass）：仅入参反序列化（前端 RSA 密文经 Controller 解密后回填语义），禁止序列化出参 */
     @TableField(exist = false)
-    @JsonProperty("dbPass")
+    @JsonProperty(value = "dbPass", access = JsonProperty.Access.WRITE_ONLY)
     private String dbPass;
 
     /** 创建时间 */

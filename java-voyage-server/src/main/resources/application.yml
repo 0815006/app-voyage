@@ -54,15 +54,19 @@ mybatis-plus:
 # =============================================
 app:
   data-root: ${DATA_ROOT:D:/data/voyage}
+  # 密码双层加密（内网固定密钥，直接写死，零维护；密钥说明见 docs）
+  #   secret-key      : AES-256-GCM 存储层密钥（落库/读出，32 字节）
+  #   rsa-private-key : RSA-OAEP 传输层私钥（PKCS#8 Base64，解密前端上行的 dbPass/ftpPass）
+  #   rsa-public-key  : RSA-OAEP 传输层公钥（SPKI Base64，经 /api/crypto/public-key 下发给前端）
+  crypto:
+    secret-key: 3bff438b790c960d62c83381a7d0e826
+    rsa-private-key: MIIEvAIBADANBgkqhkiG9w0BAQEFAASCBKYwggSiAgEAAoIBAQCaCh9YtUGN6s6NOECAhsYX6ms4FqfSq4SZGxbYHNGURkCRmkEpBITJfitnEPv11Z4cskEwNxSfYbGlgGrSCfQ0xAxu7v+qtlQOaKYeEldj6pWvSEh94UZvTokMpA7AJYRQPLhJ95kZWpjCqC1Bs/zQTizmzNJMRy1PIRdP4XHQ9yoOtj+gFUrDnYTeP+xZZ5XoPI8Z526qkqP8Cc5dXVTtE8AXpSMqWoy7pGfo7KzzDRyALqfTrymSKW1qcPWfb92m/sefHUOnoSAgXDupArX5CzrtwL4imthn43pHpJ+Szbnyhujz1C0vBFzPLTpDqlkhnkRTdUF9jk6OQx9tAd3rAgMBAAECggEAEVDH+0nMx644b8l9/rSnufKBAPoS/WyIaEmSRNLggEFxaqyjXIAEiT3klR5kpFrR/jnPeCMI722k8YzA9UFnMTNEjofRN5htVH1RBxpatoGdN+nxNC1JpKN4ZnJeshzFhdt9f9sUW7RCbcdH5xXbenL/OyaVETwDDN0UaMdX6vxhGVHruBgtmJwavsy/ieUOZJPJAIT6q5CEA8Ep7nW/7HF3igEpgHykTr/o+DKQcMqAS/+kh6OIkhlX4DmdNGSLmkG9fg9u9dSmoEjmtmofJZpglLCQnjWo4u6RseKTyjC5LZ9+h8xn8qB+azktlSRJZ3GlzeiTOEVsbl6afjE78QKBgQDIM4hmTJFTHo0xRcv16csI8rloreywZBnY5I+mUhxlObehUSzTPdV6KhQZJUCQckUkEYYkFITpwEiU+pl5nWEAsA/xImTxGUKxupAjn4Uq/ciOK0pMmh2ACGqv9rodyetMY1xH7TolwFBmQ9vYuP+Wc1mgVSmHou0lzG+GBZGBCQKBgQDE+OyNmz3+FLCURIzmrA4aKML/6KB1EuWkwOjqB3E5kkyoQ0z/JLRxfaUHNhWE8qhPf04uoqIpqZJhv1TqVnBNEtMvl4ybWOcewP8bORpiBXVnHoJaFcWNK/UIbrjBxEebGpfXbvTxVKAeleVRDyvwu7bjdiJD61tA4WmnEVbIUwKBgG6Pzxc319YAfFcmxaH0UHWLnotJ6fnr/j5C03Y1yIq6mkfTjZ7HejqyPFE6unJLORXXO653SoPQ9gSYdOOt32FC2jsAFKD1o1iFwI57zU5Vw0mIbMrrHbmUbF7rMhO7bF/OS6tJPqCUmZIwjZwdZsFOyMN75KiMeM00Hq70KkwJAoGAMSSl6EKmOeExmRxtRxQARLiMxkpk1jDLyMo0kkcfEa0VoRmBeVrQBkzBwsXUoqHkKklp2SrMaLadBfQ1nG3KgQBEXmhiNVP9/edK/qDFm1UfUIYFIbKy4iDodp0hTX7KGsGMxrwxMpDZjif52bp+TQaYf7G2pNlwoARdVsh1rW8CgYB+3hqcabLkT7sopN9KOg8iN9XDTheAWdAkTfxlvVSl7h7bzlV+rgiJXHsMRoejvjzq8lDGEm4xZ7AGTEoUp7Cr858Ga2ch1V+8a14cwAtMpdTgGz+7sqdATvSE9bBisFmGfPXYGl1+2Mlr8V2C7M8pkPHP3MltlIV4sKh/EqMC/A==
+    rsa-public-key: MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAmgofWLVBjerOjThAgIbGF+prOBan0quEmRsW2BzRlEZAkZpBKQSEyX4rZxD79dWeHLJBMDcUn2GxpYBq0gn0NMQMbu7/qrZUDmimHhJXY+qVr0hIfeFGb06JDKQOwCWEUDy4SfeZGVqYwqgtQbP80E4s5szSTEctTyEXT+Fx0PcqDrY/oBVKw52E3j/sWWeV6DyPGeduqpKj/AnOXV1U7RPAF6UjKlqMu6Rn6Oys8w0cgC6n068pkiltanD1n2/dpv7Hnx1Dp6EgIFw7qQK1+Qs67cC+IprYZ+N6R6Sfks258obo89QtLwRczy06Q6pZIZ5EU3VBfY5OjkMfbQHd6wIDAQAB
 
 # 文件分析（Document Studio）工作区物理根目录：
 # 每个工作区在此根下新建一个 UUID 子目录作为隔离沙箱（biz_workspace_sub_dir.abs_path）
 workspace:
   root-path: "${app.data-root}/workspace/"
-  # 敏感字段加密（AES-256-GCM）：数据库连接密码等敏感数据落库前加密
-  # 生产环境务必通过环境变量 APP_CRYPTO_SECRET_KEY 注入独立密钥，禁止沿用默认值
-  crypto:
-    secret-key: ${APP_CRYPTO_SECRET_KEY:voyage-2026-dev-secret-key-0123456789ABCD}
 
 performance:
   template-path: "${app.data-root}/uploads/performance/templates/"

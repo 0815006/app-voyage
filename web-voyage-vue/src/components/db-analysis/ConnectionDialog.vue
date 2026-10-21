@@ -123,6 +123,7 @@ import { reactive, ref, computed } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import type { DbConnectionConfig } from '@/api/db-analysis'
 import { testConnection, saveConnection, deleteConnection } from '@/api/db-analysis'
+import { encryptPassOrEmpty } from '@/utils/transitCrypto'
 
 const props = defineProps<{
   visible: boolean
@@ -224,8 +225,9 @@ function validateForm(): boolean {
 /**
  * 从连接对象提取提交给后端的白名单字段。
  * 忽略 createTime/updateTime/empNo 等只读与审计字段，避免意外回写。
+ * dbPass 非空时用 RSA 公钥加密上行（留空保持空，后端按 id 回退原密文）。
  */
-function toPayload(src: DbConnectionConfig): DbConnectionConfig {
+async function toPayload(src: DbConnectionConfig): Promise<DbConnectionConfig> {
   return {
     id: src.id,
     alias: src.alias,
@@ -234,7 +236,7 @@ function toPayload(src: DbConnectionConfig): DbConnectionConfig {
     port: src.port,
     dbName: src.dbName,
     dbUser: src.dbUser,
-    dbPass: src.dbPass || '',
+    dbPass: await encryptPassOrEmpty(src.dbPass || ''),
   }
 }
 
@@ -253,7 +255,7 @@ async function handleTestConnection(config: DbConnectionConfig) {
   try {
     // 表单模式：表单覆盖原连接字段（密码留空时后端按 id 自动解密原密码）
     const source = fromForm ? formSource() : config
-    const result = await testConnection(toPayload(source))
+    const result = await testConnection(await toPayload(source))
     if (result.success) {
       ElMessage.success(`连接可用：${result.alias}`)
     } else {
@@ -270,7 +272,7 @@ async function handleSave() {
   if (!validateForm()) return
   saving.value = true
   try {
-    await saveConnection(toPayload(formSource()))
+    await saveConnection(await toPayload(formSource()))
     ElMessage.success(editingOrigin.value?.id ? '连接已更新' : '连接已保存')
     emit('changed')
     cancelEdit()

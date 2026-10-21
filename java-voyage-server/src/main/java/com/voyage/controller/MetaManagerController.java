@@ -10,6 +10,7 @@ import com.voyage.common.EmpContext;
 import com.voyage.common.Result;
 import com.voyage.entity.*;
 import com.voyage.service.*;
+import com.voyage.util.RsaTransitCrypto;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -39,6 +40,7 @@ public class MetaManagerController {
     private final MetaRefFileService refFileService;
     private final MetaGenEngineService engineService;
     private final MetaFtpConfigService ftpConfigService;
+    private final RsaTransitCrypto transitCrypto;
 
     @Value("${meta.template-path}")
     private String templatePath;
@@ -240,8 +242,9 @@ public class MetaManagerController {
         if (config.getId() == null) {
             config.setCreateUser(empNo);
         }
-        ftpConfigService.saveOrUpdate(config);
-        return Result.ok(config);
+        // 入参 ftpPass 为 RSA 传输密文，解密后由 Service 做 GCM 加密落库；出参已脱敏
+        config.setFtpPass(transitCrypto.decryptOrNull(config.getFtpPass()));
+        return Result.ok(ftpConfigService.saveConfig(config));
     }
 
     @DeleteMapping("/ftp-configs/{id}")

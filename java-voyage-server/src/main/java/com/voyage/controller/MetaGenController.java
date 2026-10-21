@@ -136,8 +136,13 @@ public class MetaGenController {
         File localFile = new File(filePath);
         if (!localFile.exists()) return Result.fail("本地文件不存在");
 
-        MetaFtpConfig ftpConfig = ftpConfigService.getById(req.getFtpConfigId());
-        if (ftpConfig == null) return Result.fail("FTP配置不存在");
+        // ftp_pass 存 GCM 密文，登录前按 id 解密出明文（仅存本次请求内存）
+        MetaFtpConfig ftpConfig;
+        try {
+            ftpConfig = ftpConfigService.getDecrypted(req.getFtpConfigId());
+        } catch (Exception e) {
+            return Result.fail("FTP配置不存在或密码解密失败，请重新保存FTP密码");
+        }
 
         FTPClient ftpClient = new FTPClient();
         try (FileInputStream fis = new FileInputStream(localFile)) {

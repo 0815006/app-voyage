@@ -225,7 +225,8 @@
         <el-row :gutter="16">
           <el-col :span="12">
             <el-form-item label="密码" prop="ftpPass">
-              <el-input v-model="ftpForm.ftpPass" type="password" show-password placeholder="FTP密码" />
+              <el-input v-model="ftpForm.ftpPass" type="password" show-password
+                :placeholder="ftpFormMode === 'edit' ? '不修改请留空，后端保留原密文' : 'FTP密码（加密存储于服务端）'" />
             </el-form-item>
           </el-col>
           <el-col :span="12">
@@ -300,6 +301,7 @@ import {
   listFtpConfigs, saveFtpConfig, deleteFtpConfig, uploadToFtp,
   getEnumKeys, listRefFiles,
 } from '@/api/meta-gen'
+import { encryptPassOrEmpty } from '@/utils/transitCrypto'
 import ModelEditDialog from '@/components/meta-gen/ModelEditDialog.vue'
 import FieldEditDialog from '@/components/meta-gen/FieldEditDialog.vue'
 import EnumManageDialog from '@/components/meta-gen/EnumManageDialog.vue'
@@ -457,7 +459,14 @@ const ftpRules: FormRules = {
   name: [{ required: true, message: '请输入名称', trigger: 'blur' }],
   ftpIp: [{ required: true, message: '请输入FTP IP', trigger: 'blur' }],
   ftpUser: [{ required: true, message: '请输入用户名', trigger: 'blur' }],
-  ftpPass: [{ required: true, message: '请输入密码', trigger: 'blur' }],
+  // 密码仅新增必填；编辑留空 = 不修改（后端保留原密文）
+  ftpPass: [{
+    validator: (_rule, value, callback) => {
+      if (ftpFormMode.value === 'create' && !value) callback(new Error('请输入密码'))
+      else callback()
+    },
+    trigger: 'blur',
+  }],
   remotePath: [{ required: true, message: '请输入远程路径', trigger: 'blur' }],
 }
 
@@ -778,7 +787,8 @@ function editFtpConfig(row: FtpConfig) {
   ftpForm.ftpIp = row.ftpIp
   ftpForm.ftpPort = row.ftpPort || 21
   ftpForm.ftpUser = row.ftpUser
-  ftpForm.ftpPass = row.ftpPass
+  // 列表已脱敏不回传密码（密文落库），编辑时置空由用户决定是否改密
+  ftpForm.ftpPass = ''
   ftpForm.remotePath = row.remotePath
 }
 
@@ -795,14 +805,19 @@ function resetFtpForm() {
 }
 
 function submitFtpForm() {
-  ftpFormRef.value?.validate((valid: boolean) => {
+  ftpFormRef.value?.validate(async (valid: boolean) => {
     if (!valid) return
     ftpSubmitting.value = true
-    saveFtpConfig({ ...ftpForm }).then(() => {
+    try {
+      // ftpPass 非空时 RSA 公钥加密上行，后端解密后 GCM 加密落库
+      const payload = { ...ftpForm, ftpPass: await encryptPassOrEmpty(ftpForm.ftpPass) }
+      await saveFtpConfig(payload)
       ElMessage.success(ftpFormMode.value === 'create' ? '新增成功' : '修改成功')
       resetFtpForm()
       loadFtpConfigs()
-    }).finally(() => { ftpSubmitting.value = false })
+    } finally {
+      ftpSubmitting.value = false
+    }
   })
 }
 

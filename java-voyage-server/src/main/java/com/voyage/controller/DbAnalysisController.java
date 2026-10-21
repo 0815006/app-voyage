@@ -10,6 +10,7 @@ import com.voyage.entity.DbConnectionConfigEntity;
 import com.voyage.entity.SessionDbAnalysis;
 import com.voyage.service.DbConnectionConfigService;
 import com.voyage.service.SessionDbAnalysisService;
+import com.voyage.util.RsaTransitCrypto;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.*;
@@ -26,6 +27,9 @@ import java.util.Map;
  * 会话管理（新建/列表/删除）与 SQL 流式分析（SSE）与人工审批恢复（HITL）。
  * analyze/test-connection 支持携带连接 id，由后端按当前操作者自动解密出明文密码，
  * 明文仅存在于单次请求内存中。
+ * <p>
+ * 传输层加密：前端上行的 dbPass 为 RSA-OAEP 密文（见 RsaTransitCrypto），
+ * 各入口先解密为明文再进入现有 GCM 存储/使用流程；留空仍表示不修改密码。
  *
  * @author voyage
  */
@@ -39,13 +43,16 @@ public class DbAnalysisController {
     private final DbAnalysisWorkbench workbench;
     private final SessionDbAnalysisService sessionService;
     private final DbConnectionConfigService connectionService;
+    private final RsaTransitCrypto transitCrypto;
 
     public DbAnalysisController(DbAnalysisWorkbench workbench,
                                 SessionDbAnalysisService sessionService,
-                                DbConnectionConfigService connectionService) {
+                                DbConnectionConfigService connectionService,
+                                RsaTransitCrypto transitCrypto) {
         this.workbench = workbench;
         this.sessionService = sessionService;
         this.connectionService = connectionService;
+        this.transitCrypto = transitCrypto;
     }
 
     // ==================== 会话管理 ====================
@@ -113,9 +120,10 @@ public class DbAnalysisController {
         return Result.ok(connectionService.listByEmpNo(EmpContext.getEmpNo()));
     }
 
-    /** 新增或更新数据库连接：密码 AES-256-GCM 加密落库；编辑未填密码时保留原密文。 */
+    /** 新增或更新数据库连接：入参 dbPass 为 RSA 传输密文，解密后 AES-256-GCM 加密落库；编辑未填密码时保留原密文。 */
     @PostMapping("/connection")
     public Result<DbConnectionConfigEntity> saveConnection(@RequestBody DbConnectionConfigEntity entity) {
+        entity.setDbPass(transitCrypto.decryptOrNull(entity.getDbPass()));
         DbConnectionConfigEntity saved = connectionService.saveConnection(EmpContext.getEmpNo(), entity);
         // 出参脱敏：不回传明文/密文密码
         saved.setDbPass(null);
@@ -206,7 +214,10 @@ public class DbAnalysisController {
             // 兼容 dbName / db_name 双键，均缺省时回退已保存值
             String dbName = orElse(map, "dbName", orElse(map, "db_name", saved.getDbName()));
             String user = orElse(map, "dbUser", saved.getDbUser());
-            String password = orElse(map, "dbPass", saved.getDbPass());
+            // 请求显式携带的 dbPass 为 RSA 传输密文，需解密；缺省/留空回退已保存连接的解密结果
+            String reqPass = str(map.get("dbPass"));
+            String password = (reqPass == null || reqPass.isBlank())
+                    ? saved.getDbPass() : transitCrypto.decrypt(reqPass);
             return new DbConnectionConfig(alias, dialect, host, port, dbName, user, password);
         }
         String alias = str(map.get("alias"));
@@ -219,7 +230,8 @@ public class DbAnalysisController {
             dbName = str(map.get("db_name"));
         }
         String user = str(map.get("dbUser"));
-        String password = str(map.get("dbPass"));
+        // 未落库连接的临时密码同样按 RSA 传输密文上行
+        String password = transitCrypto.decryptOrNull(str(map.get("dbPass")));
         return new DbConnectionConfig(alias, dialect, host, port, dbName, user, password);
     }
 
