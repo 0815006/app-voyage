@@ -64,6 +64,10 @@ public class DbAnalysisWorkbench {
     @Value("${db-analysis.query-timeout-seconds:30}")
     private int queryTimeoutSeconds;
 
+    /** ReAct 智能体单轮对话最大执行步数（每步 = 一次推理 + 可选工具调用），默认 50 */
+    @Value("${db-analysis.max-steps:50}")
+    private int maxSteps;
+
     public DbAnalysisWorkbench(AgentRunner agentRunner,
                                SchemaGenerator schemaGenerator,
                                SessionDbAnalysisService sessionService) {
@@ -137,7 +141,7 @@ public class DbAnalysisWorkbench {
                         .systemPrompt(systemPrompt)
                         .userPrompt(prompt + composeHistory(historyContext))
                         .tools(registry.getAll())
-                        .maxSteps(50)
+                        .maxSteps(maxSteps)
                         .listener(new AgentEventListener() {
                             @Override
                             public void onStepStart(int step) {

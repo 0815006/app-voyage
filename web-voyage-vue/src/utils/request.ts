@@ -39,8 +39,9 @@ instance.interceptors.response.use(
       ElMessage.error(body.message || '请求失败')
       return Promise.reject(new Error(body.message || '请求失败'))
     }
-    // 提取 Result<T> 中的 data 字段直接返回
-    return body.data !== undefined ? body.data : body
+    // 提取 Result<T> 中的 data 字段直接返回；
+    // data 为 null 时（如 Result.ok() 无 data 场景）回退返回完整 body，保证调用方仍可取 code/message
+    return body.data != null ? body.data : body
   },
   (error: Error) => {
     ElMessage.error(error.message || '网络异常')

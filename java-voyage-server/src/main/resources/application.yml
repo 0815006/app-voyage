@@ -78,6 +78,13 @@ db-analysis:
   max-rows: ${DB_ANALYSIS_MAX_ROWS:2000}
   # 语句级查询超时（秒），行数放大后相应放宽（SDK 默认 10s）
   query-timeout-seconds: ${DB_ANALYSIS_QUERY_TIMEOUT_SECONDS:30}
+  # 单轮对话最大执行步数（每步 = 一次推理 + 可选工具调用），过小会截断复杂任务
+  max-steps: ${DB_ANALYSIS_MAX_STEPS:50}
+
+# 文件分析（Document Studio）：ReAct 智能体单轮对话卡口
+file-analysis:
+  # 单轮对话最大执行步数（每步 = 一次推理 + 可选工具调用），过小会截断复杂任务
+  max-steps: ${FILE_ANALYSIS_MAX_STEPS:50}
 
 meta:
   max-file-lines: 2000

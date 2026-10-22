@@ -192,8 +192,9 @@ async function submitUpload() {
       form.fileSource
     )
     result.value = '✅ 上传成功！'
+    // 拦截器在 data=null 时返回完整 body（含 message），防御性可选链避免 NPE
     ElMessage.success(
-      (res as { message?: string }).message || '文件上传成功'
+      res?.message || '文件上传成功'
     )
     emit('refresh')
     setTimeout(() => {

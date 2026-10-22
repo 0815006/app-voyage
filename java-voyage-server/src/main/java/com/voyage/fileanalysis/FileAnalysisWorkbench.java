@@ -20,6 +20,7 @@ import com.voyage.service.SessionTextAnalysisService;
 import com.voyage.service.WorkspaceFileService;
 import com.voyage.service.WorkspaceSubDirService;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
@@ -54,6 +55,10 @@ public class FileAnalysisWorkbench {
     private final WorkspaceSubDirService workspaceService;
     private final WorkspaceFileService fileService;
     private final SessionTextAnalysisService sessionService;
+
+    /** ReAct 智能体单轮对话最大执行步数（每步 = 一次推理 + 可选工具调用），默认 50 */
+    @Value("${file-analysis.max-steps:50}")
+    private int maxSteps;
 
     public FileAnalysisWorkbench(AgentRunner agentRunner,
                                  com.realapex.tool.schema.SchemaGenerator schemaGenerator,
@@ -130,7 +135,7 @@ public class FileAnalysisWorkbench {
                         .systemPrompt(systemPrompt)
                         .userPrompt(prompt + composeHistory(historyContext) + fileManifest)
                         .tools(registry.getAll())
-                        .maxSteps(10)
+                        .maxSteps(maxSteps)
                         .listener(new AgentEventListener() {
                             @Override
                             public void onStepStart(int step) {
