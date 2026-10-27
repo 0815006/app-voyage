@@ -67,6 +67,12 @@ const routes: RouteRecordRaw[] = [
         component: () => import('@/views/FileAnalysis.vue'),
         meta: { title: '文件分析' },
       },
+      {
+        path: 'dead-tuple',
+        name: 'DeadTuple',
+        component: () => import('@/views/DeadTuple.vue'),
+        meta: { title: '死元组监测' },
+      },
     ],
   },
 ]
