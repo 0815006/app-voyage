@@ -86,14 +86,20 @@ import type { SamplingColumn, SamplingTask } from '@/api/sampling'
 import { saveTask, previewColumns } from '@/api/sampling'
 import type { DbConnectionConfig } from '@/api/db-analysis'
 
-/** 内置高斯死元组查询模板（pg_stat_user_tables，含模式名便于同名表跨模式区分） */
+/** 内置高斯死元组查询模板（pg_stat_user_tables）：
+ * 固化字段——模式名/表名/死元组数/活跃元组数/死元组占比/多个 vacuum 时间；
+ * WHERE n_dead_tup > 0 剔除零死元组表，避免采样结果被大量无意义行淹没 */
 const GAUSS_DEAD_TUPLE_SQL = `SELECT schemaname,
        relname,
        n_dead_tup,
        n_live_tup,
+       ROUND(n_dead_tup * 100.0 / NULLIF(n_dead_tup + n_live_tup, 0), 2) AS dead_ratio,
+       last_vacuum,
        last_autovacuum,
+       last_analyze,
        last_autoanalyze
 FROM pg_stat_user_tables
+WHERE n_dead_tup > 0
 ORDER BY n_dead_tup DESC`
 
 const props = defineProps<{

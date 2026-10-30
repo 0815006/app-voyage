@@ -32,7 +32,12 @@ public interface SamplingTaskService {
     /** 查询单个任务（校验归属）。 */
     SamplingTask getTask(String empNo, String id);
 
-    /** 新增或更新任务（运行中的任务禁止编辑；custom_sql 仅允许 SELECT/WITH）。 */
+    /**
+     * 新增或更新任务（custom_sql 仅允许 SELECT/WITH）。
+     * 任务定义锁定规则：运行中禁止编辑；已产生采样明细的任务也禁止编辑，
+     * 需先 {@link #clearHistory} 清理已采集记录，或另建新任务。
+     * chart_config 随任务一并存取（黑盒，仅做长度上限防护）。
+     */
     SamplingTask saveTask(String empNo, SamplingTask task);
 
     /** 删除任务（运行中先停止调度，再级联删除历史明细）。 */
@@ -46,6 +51,14 @@ public interface SamplingTaskService {
 
     /** 查询指定任务时间窗口内的采样明细（校验任务归属）。 */
     List<SamplingHistory> listHistory(String empNo, String taskId, LocalDateTime start, LocalDateTime end);
+
+    /**
+     * 清理指定任务的全部已采集记录（保留任务定义本身），清理后任务定义方可编辑。
+     * 运行中的任务需先停止；清理完成后状态统一归位 STOPPED（含已完成任务，便于改定义重跑）。
+     *
+     * @return 实际删除的明细行数
+     */
+    int clearHistory(String empNo, String taskId);
 
     /**
      * 解析采样 SQL 的结果集列结构（供前端筛选器确定维度列/展示列候选）。

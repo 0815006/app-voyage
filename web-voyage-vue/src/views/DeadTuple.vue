@@ -97,7 +97,31 @@
                 :loading="actioning"
                 @click="handleStop"
               >停止</el-button>
-              <el-button size="small" :disabled="currentTask.status === 'RUNNING'" @click="openEdit">编辑任务</el-button>
+              <el-tooltip
+                :content="editLocked
+                  ? '运行中或已有采样记录时不可编辑任务定义，请先停止并清理已采集记录'
+                  : '编辑任务定义'"
+                placement="top"
+              >
+                <span>
+                  <el-button size="small" :disabled="editLocked" @click="openEdit">编辑任务</el-button>
+                </span>
+              </el-tooltip>
+              <el-tooltip
+                :content="sampledCount ? '删除该任务全部采样记录（不可恢复），清完才能改任务定义' : '暂无已采集记录'"
+                placement="top"
+              >
+                <span>
+                  <el-button
+                    type="warning"
+                    plain
+                    size="small"
+                    :loading="actioning"
+                    :disabled="currentTask.status === 'RUNNING' || sampledCount === 0"
+                    @click="handleClearHistory"
+                  >清理已采集记录</el-button>
+                </span>
+              </el-tooltip>
               <el-button type="danger" plain size="small" :loading="actioning" @click="handleDelete">删除任务</el-button>
             </div>
           </section>
@@ -106,17 +130,17 @@
           <section class="dashboard">
             <div class="dash-toolbar">
               <div class="toolbar-item">
-                <span class="toolbar-label">展示列</span>
-                <el-select v-model="selectedMetrics" multiple collapse-tags collapse-tags-tooltip
-                           :max-collapse-tags="2" placeholder="纵轴指标列（默认死元组）" class="metric-select">
-                  <el-option v-for="m in metricCandidates" :key="m" :label="m" :value="m" />
+                <span class="toolbar-label">表筛选</span>
+                <el-select v-model="selectedEntities" multiple filterable collapse-tags collapse-tags-tooltip
+                           :max-collapse-tags="2" placeholder="模式.表名（多选 · 一表一条线）" class="entity-select">
+                  <el-option v-for="name in entityNames" :key="name" :label="name" :value="name" />
                 </el-select>
               </div>
               <div class="toolbar-item">
-                <span class="toolbar-label">表范围</span>
-                <el-select v-model="selectedEntities" multiple filterable collapse-tags collapse-tags-tooltip
-                           :max-collapse-tags="2" placeholder="全部表" class="entity-select">
-                  <el-option v-for="name in entityNames" :key="name" :label="name" :value="name" />
+                <span class="toolbar-label">展示项</span>
+                <el-select v-model="selectedMetrics" multiple collapse-tags collapse-tags-tooltip
+                           :max-collapse-tags="2" placeholder="每个展示项单独一张图" class="metric-select">
+                  <el-option v-for="m in metricCandidates" :key="m" :label="m" :value="m" />
                 </el-select>
               </div>
               <div class="toolbar-item">
@@ -164,15 +188,20 @@
               <div class="metric-card">
                 <div class="metric-title">采样点数</div>
                 <div class="metric-value">{{ history.length }}</div>
-                <div class="metric-sub">{{ currentTask.status === 'RUNNING' ? '运行中 · 5 秒自动刷新' : '任务未运行' }}</div>
+                <div class="metric-sub">{{ currentTask.status === 'RUNNING' ? '运行中 · 手动点击刷新' : '任务未运行' }}</div>
               </div>
             </div>
 
-            <!-- 波动图表区 -->
-            <div class="chart-block">
-              <div class="chart-title">波动趋势（横轴=采样时间 · 每条线=表 × 展示列，观察波峰累积与波谷清理）</div>
-              <TrendChart :labels="chartLabels" :series="chartSeries" />
+            <!-- 波动图表区：每个展示项单独一张图，图内每条线=一张表 -->
+            <div v-if="trendModel.length" class="charts-wrap">
+              <div v-for="c in trendModel" :key="c.metric" class="chart-block">
+                <div class="chart-title">
+                  {{ c.metric }} · 波动趋势（横轴=采样时间 · 每条线=一张表 模式.表名，观察波峰累积与波谷清理）
+                </div>
+                <TrendChart :labels="c.labels" :series="c.series" />
+              </div>
             </div>
+            <el-empty v-else description="请选择展示项（及表筛选），点击右上“刷新数据”绘制波动图" :image-size="60" />
           </section>
         </template>
 
@@ -199,11 +228,11 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Refresh, Setting } from '@element-plus/icons-vue'
 import type { SamplingColumn, SamplingHistoryRow, SamplingTask } from '@/api/sampling'
-import { deleteTask, listHistory, listTasks, previewColumns, startTask, stopTask } from '@/api/sampling'
+import { clearHistory, deleteTask, listHistory, listTasks, previewColumns, startTask, stopTask } from '@/api/sampling'
 import type { DbConnectionConfig } from '@/api/db-analysis'
 import { listConnections } from '@/api/db-analysis'
 import ConnectionDialog from '@/components/db-analysis/ConnectionDialog.vue'
@@ -234,11 +263,24 @@ const currentTask = computed(
   () => tasks.value.find(t => t.id === currentTaskId.value) || null
 )
 
+/** 已采集行数：优先取后端瞬态 historyCount（全量准确），回退本地明细行数 */
+const sampledCount = computed(() => currentTask.value?.historyCount ?? history.value.length)
+
+/**
+ * 任务定义锁定：运行中或已采集过数据即不可编辑（后端 saveTask 同步卡口防绕过）。
+ * 与通用采样统计页同一套规则，出口只有两个：清理已采集记录后编辑，或另建新任务。
+ */
+const editLocked = computed(
+  () => !currentTask.value || currentTask.value.status === 'RUNNING' || sampledCount.value > 0
+)
+
 /* ==================== 加载 ==================== */
 async function loadTasks() {
   loadingTasks.value = true
   try {
-    tasks.value = await listTasks()
+    const all = await listTasks()
+    // 后端 listTasks 返回全部类型；本页面仅展示死元组采样任务（排除通用采样统计任务）
+    tasks.value = all.filter(t => t.samplingType !== 'DB_SAMPLER')
     // 任务被外部删除后清掉失效选中
     if (currentTaskId.value && !tasks.value.some(t => t.id === currentTaskId.value)) {
       currentTaskId.value = ''
@@ -383,97 +425,83 @@ function numOf(v: unknown): number {
   return Number.isFinite(n) ? n : 0
 }
 
-/** 按采样时间分组 → 时间轴 + 实体×展示列的取值桶（后绘图时每条线=表×展示列） */
-const trendData = computed(() => {
-  const times = [...new Set(history.value.map(h => h.samplingTime))].sort()
-  const metrics = selectedMetrics.value
-  if (times.length === 0 || metrics.length === 0) {
-    return { labels: [] as string[], map: new Map<string, Map<string, number>>(), times: [] as string[] }
-  }
+/** 单张波动图：一个展示项 + 时间轴标签 + 每张表一条线 */
+interface MetricChart {
+  metric: string
+  labels: string[]
+  series: TrendSeries[]
+}
 
-  // 表范围过滤（空=全部）
-  const inScope = (row: Record<string, unknown>) =>
-    selectedEntities.value.length === 0 || selectedEntities.value.includes(qualifiedName(row))
+/** 行是否在表筛选范围内（多选 模式.表名，空=全部表） */
+function inScope(row: Record<string, unknown>): boolean {
+  return selectedEntities.value.length === 0 || selectedEntities.value.includes(qualifiedName(row))
+}
 
-  // 实体 -> 展示列 -> (samplingTime -> 求和)
-  const perEntity = new Map<string, Map<string, Map<string, number>>>()
+/** 筛选范围内的表（模式.表名）去重清单，按名称排序——用于稳定配色，同一张表在所有图中颜色一致 */
+const scopedEntities = computed(() => {
+  const set = new Set<string>()
   for (const h of history.value) {
-    if (!inScope(h.row)) continue
-    const ent = qualifiedName(h.row)
-    let byMetric = perEntity.get(ent)
-    if (!byMetric) {
-      byMetric = new Map()
-      perEntity.set(ent, byMetric)
-    }
-    for (const m of metrics) {
-      let bucket = byMetric.get(m)
-      if (!bucket) {
-        bucket = new Map()
-        byMetric.set(m, bucket)
-      }
-      bucket.set(h.samplingTime, (bucket.get(h.samplingTime) || 0) + numOf(h.row[m]))
-    }
+    if (inScope(h.row)) set.add(qualifiedName(h.row))
   }
+  return [...set].sort()
+})
 
-  // 线数卡口：实体×展示列组合最多 12 条；超出时按主展示列死元组量级取前 8 张表
-  const deadHint = columnMap.value.dead
-  let entities = [...perEntity.keys()].sort()
-  if (entities.length * metrics.length > 12) {
-    const latest = times[times.length - 1]
-    entities.sort((a, b) => {
-      const va = perEntity.get(a)?.get(deadHint || metrics[0])?.get(latest) ?? 0
-      const vb = perEntity.get(b)?.get(deadHint || metrics[0])?.get(latest) ?? 0
-      return vb - va
-    })
-    entities = entities.slice(0, 8)
-  }
+const PALETTE = ['#f56c6c', '#409eff', '#67c23a', '#e6a23c', '#909399', '#9254de', '#13c2c2', '#fa541c', '#2f54eb', '#eb2f96', '#389e0d', '#d4380d']
+
+/** 表→颜色：按在 scopedEntities 中的序号取色，跨图保持一致 */
+function entityColor(ent: string): string {
+  const idx = scopedEntities.value.indexOf(ent)
+  return PALETTE[(idx < 0 ? 0 : idx) % PALETTE.length]
+}
+
+/**
+ * 每个展示项单独一张波动图：
+ * 横轴=采样时间（同一张表同一时间点多行求和），图内每条线=一张表（模式.表名），不同表不同颜色。
+ */
+const trendModel = computed<MetricChart[]>(() => {
+  const metrics = selectedMetrics.value
+  const times = [...new Set(history.value.map(h => h.samplingTime))].sort()
+  if (times.length === 0 || metrics.length === 0) return []
 
   // 抽稀：单条线最多约 400 点，高频长时间段仍流畅
   const step = Math.max(1, Math.ceil(times.length / 400))
   const keptTimes = times.filter((_, i) => i % step === 0 || i === times.length - 1)
   const labels = keptTimes.map(t => t.slice(11, 19) || t)
+  const latest = times[times.length - 1]
 
-  // key = "实体||展示列"，取值桶按保留时间点重建
-  const map = new Map<string, Map<string, number>>()
-  for (const ent of entities) {
-    const byMetric = perEntity.get(ent)!
-    for (const m of metrics) {
-      const src = byMetric.get(m)
-      if (!src) continue
-      const m2 = new Map<string, number>()
-      keptTimes.forEach(t => {
-        if (src.has(t)) m2.set(t, src.get(t)!)
-      })
-      map.set(`${ent}||${m}`, m2)
+  const charts: MetricChart[] = []
+  for (const m of metrics) {
+    // 表 -> (samplingTime -> 求和)
+    const perEntity = new Map<string, Map<string, number>>()
+    for (const h of history.value) {
+      if (!inScope(h.row)) continue
+      const ent = qualifiedName(h.row)
+      let bucket = perEntity.get(ent)
+      if (!bucket) {
+        bucket = new Map()
+        perEntity.set(ent, bucket)
+      }
+      bucket.set(h.samplingTime, (bucket.get(h.samplingTime) || 0) + numOf(h.row[m]))
     }
+
+    // 线数卡口：单图最多 12 条线；超出按最新时间点取值取前 12 张表
+    let entities = [...perEntity.keys()]
+    if (entities.length > 12) {
+      entities.sort((a, b) => (perEntity.get(b)!.get(latest) ?? 0) - (perEntity.get(a)!.get(latest) ?? 0))
+      entities = entities.slice(0, 12)
+    } else {
+      entities.sort()
+    }
+
+    const series: TrendSeries[] = entities.map(ent => ({
+      label: ent,
+      color: entityColor(ent),
+      dash: '',
+      points: keptTimes.map(t => perEntity.get(ent)!.get(t) ?? 0),
+    }))
+    charts.push({ metric: m, labels, series })
   }
-  return { labels, map, times: keptTimes }
-})
-
-const PALETTE = ['#f56c6c', '#409eff', '#67c23a', '#e6a23c', '#909399', '#9254de', '#13c2c2', '#fa541c']
-/** 同一实体内不同展示列的线型（实线/虚线/点线循环） */
-const DASHES = ['', '6 4', '2 3', '10 4 2 4']
-
-const chartLabels = computed(() => trendData.value.labels)
-
-const chartSeries = computed<TrendSeries[]>(() => {
-  const data = trendData.value
-  if (data.labels.length === 0) return []
-  const multiMetric = selectedMetrics.value.length > 1
-  const entityOrder = [...new Set([...data.map.keys()].map(k => k.split('||')[0]))]
-  const series: TrendSeries[] = []
-  data.map.forEach((bucket, key) => {
-    const [ent, metric] = key.split('||')
-    const color = PALETTE[entityOrder.indexOf(ent) % PALETTE.length]
-    const dash = multiMetric ? DASHES[selectedMetrics.value.indexOf(metric) % DASHES.length] : ''
-    series.push({
-      label: multiMetric ? `${ent} · ${metric}` : ent,
-      color,
-      dash,
-      points: data.times.map(t => bucket.get(t) ?? 0),
-    })
-  })
-  return series
+  return charts
 })
 
 /* ==================== 指标卡片 ==================== */
@@ -518,18 +546,41 @@ const metricRatio = computed(() => {
   return ((deadSum / total) * 100).toFixed(2) + '%'
 })
 
+/** 清理时间列取值归一化为 epoch 毫秒：
+ * 后端 row_data 中时间列被 Jackson 序列化为 epoch 数字（也可能是数字字符串），
+ * 兼容 ISO 字符串（如 2026-10-27T10:00:00）；无法解析返回 null */
+function toEpochMs(v: unknown): number | null {
+  if (v === null || v === undefined || v === '') return null
+  if (typeof v === 'number') return fixVacuumUnit(v)
+  const s = String(v)
+  if (/^\d{10,}$/.test(s)) return fixVacuumUnit(Number(s))
+  const t = Date.parse(s)
+  return isNaN(t) ? null : t
+}
+
+/** Jackson 对 java.sql.Timestamp 默认序列化为毫秒，个别驱动/秒级时间戳按秒补齐 */
+function fixVacuumUnit(n: number): number {
+  return n < 1e11 ? n * 1000 : n
+}
+
+/** epoch 毫秒 → yyyy-MM-dd HH:mm:ss */
+function fmtEpochMs(ms: number): string {
+  const d = new Date(ms)
+  const p = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`
+}
+
 const metricLastVacuum = computed(() => {
   const col = columnMap.value.vacuum
   if (!col) return '-'
-  let latest = ''
+  let latest: number | null = null
   for (const h of history.value) {
     if (selectedEntities.value.length > 0 && !selectedEntities.value.includes(qualifiedName(h.row))) continue
-    const v = h.row[col]
-    if (v === null || v === undefined) continue
-    const s = String(v)
-    if (s > latest) latest = s
+    const ms = toEpochMs(h.row[col])
+    if (ms === null) continue
+    if (latest === null || ms > latest) latest = ms
   }
-  return latest ? latest.replace('T', ' ').slice(0, 19) : '暂无清理记录'
+  return latest !== null ? fmtEpochMs(latest) : '暂无清理记录'
 })
 
 /* ==================== 任务操作 ==================== */
@@ -548,7 +599,7 @@ function openCreate() {
 }
 
 function openEdit() {
-  if (!currentTask.value) return
+  if (!currentTask.value || editLocked.value) return
   editingTask.value = { ...currentTask.value }
   showTaskDialog.value = true
 }
@@ -571,7 +622,7 @@ async function handleStart() {
     await startTask(currentTaskId.value)
     ElMessage.success('采样任务已启动')
     await loadTasks()
-    scheduleHistoryRefresh()
+    loadHistory()
   } catch {
     // 异常已由拦截器提示
   } finally {
@@ -585,6 +636,37 @@ async function handleStop() {
   try {
     await stopTask(currentTaskId.value)
     ElMessage.success('采样任务已停止')
+    await loadTasks()
+    loadHistory()
+  } catch {
+    // 异常已由拦截器提示
+  } finally {
+    actioning.value = false
+  }
+}
+
+async function handleClearHistory() {
+  const task = currentTask.value
+  if (!task?.id) return
+  if (task.status === 'RUNNING') {
+    ElMessage.warning('任务运行中，请先停止采样再清理已采集记录')
+    return
+  }
+  const rows = sampledCount.value
+  try {
+    await ElMessageBox.confirm(
+      `将删除任务【${task.taskName}】的全部 ${rows} 行采样记录，不可恢复；清理后任务定义方可编辑（状态归位已停止）。确定继续？`,
+      '清理已采集记录',
+      { type: 'warning', confirmButtonText: '确定清理', cancelButtonText: '取消' }
+    )
+  } catch {
+    return
+  }
+  actioning.value = true
+  try {
+    const deleted = await clearHistory(task.id)
+    ElMessage.success(`已清理 ${typeof deleted === 'number' ? deleted : rows} 行采样记录，现在可编辑任务定义`)
+    history.value = []
     await loadTasks()
     loadHistory()
   } catch {
@@ -620,27 +702,7 @@ async function handleDelete() {
   }
 }
 
-/* ==================== 自动刷新（运行中任务） ==================== */
-let pollTimer: ReturnType<typeof setInterval> | null = null
-
-function scheduleHistoryRefresh() {
-  loadHistory()
-}
-
-function ensurePolling() {
-  pollTimer = setInterval(async () => {
-    await loadTasks()
-    const cur = currentTask.value
-    if (cur && cur.status === 'RUNNING') {
-      await loadHistory()
-    }
-  }, 5000)
-}
-
-watch(rangePreset, () => loadHistory())
-watch(customRange, () => {
-  if (rangePreset.value === 'custom') loadHistory()
-})
+/* 刷新仅由手动点击“刷新数据”按钮触发（绘制不自动轮询） */
 
 /* ==================== 展示辅助 ==================== */
 function connById(connectionId: string): DbConnectionConfig | undefined {
@@ -679,11 +741,6 @@ onMounted(async () => {
     currentTaskId.value = tasks.value[0].id!
     await Promise.all([loadColumns(), loadHistory()])
   }
-  ensurePolling()
-})
-
-onUnmounted(() => {
-  if (pollTimer) clearInterval(pollTimer)
 })
 </script>
 
@@ -951,6 +1008,13 @@ onUnmounted(() => {
 .metric-sub {
   font-size: 12px;
   color: #a8abb2;
+}
+
+.charts-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 4px;
 }
 
 .chart-block {

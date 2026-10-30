@@ -7,7 +7,7 @@ import request from '@/utils/request'
  * 数据库连接复用「数据库性能分析」模块的 db_connection_config（本模块零密码概念）。
  */
 
-/** 通用采样任务（sampling_type 当前固定 DEAD_TUPLE，预留扩展） */
+/** 通用采样任务（sampling_type 区分预设：DEAD_TUPLE 固化 / DB_SAMPLER 用户自选） */
 export interface SamplingTask {
   id?: string
   taskName: string
@@ -22,6 +22,13 @@ export interface SamplingTask {
   frequency: number
   /** RUNNING / STOPPED / COMPLETED（后端驱动，只读） */
   status?: string
+  /**
+   * 绘图配置 JSON 文本（筛选列/展示列等「怎么画」的结构性设定）。
+   * 后端按黑盒原样存取；具体筛选项（数据值）属查看态临时筛选，不落库。
+   */
+  chartConfig?: string
+  /** 已采集明细行数（后端瞬态回传，只读）：>0 即锁定任务定义 */
+  historyCount?: number
   createTime?: string
   updateTime?: string
 }
@@ -49,7 +56,7 @@ export function listTasks(): Promise<SamplingTask[]> {
   return request.get('/sampling/tasks')
 }
 
-/** 新增或更新任务（运行中禁止编辑） */
+/** 新增或更新任务（运行中或已有采样记录时禁止编辑） */
 export function saveTask(task: SamplingTask): Promise<SamplingTask> {
   return request.post('/sampling/task', task)
 }
@@ -88,4 +95,13 @@ export async function previewColumns(connectionId: string, customSql: string): P
  */
 export function listHistory(id: string, start?: string, end?: string): Promise<SamplingHistoryRow[]> {
   return request.get(`/sampling/task/${id}/history`, { params: { start, end } })
+}
+
+/**
+ * 清理该任务全部已采集记录（保留任务定义，不可恢复）。
+ * 运行中需先停止；清理后状态归位 STOPPED，任务定义随之可编辑。
+ * @returns 实际删除的行数
+ */
+export function clearHistory(id: string): Promise<number> {
+  return request.delete(`/sampling/task/${id}/history`)
 }

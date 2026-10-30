@@ -8,6 +8,7 @@ import com.voyage.mapper.DbConnectionConfigMapper;
 import com.voyage.service.DbConnectionConfigService;
 import com.voyage.util.AesGcmCrypto;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.BeanUtils;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -101,9 +102,15 @@ public class DbConnectionConfigServiceImpl
         if (existing == null) {
             throw new BusinessException(404, "连接不存在或无权操作");
         }
-        existing.setDbPass(crypto.decrypt(existing.getDbPassEnc()));
-        existing.setDbPassEnc(null);
-        return existing;
+        String plain = crypto.decrypt(existing.getDbPassEnc());
+        // 必须返回脱钩副本，不能原地改 existing：同一事务内相同 SELECT 会命中 MyBatis 一级缓存
+        // 返回同一实例，若在其实例上清掉 dbPassEnc/写入明文，后续再次 getDecrypted 会读到空密文
+        // （曾报 “待解密内容不能为空” 400），且明文长期驻留缓存也有泄露面
+        DbConnectionConfigEntity detached = new DbConnectionConfigEntity();
+        BeanUtils.copyProperties(existing, detached);
+        detached.setDbPass(plain);
+        detached.setDbPassEnc(null);
+        return detached;
     }
 
     // ==================== 私有方法 ====================

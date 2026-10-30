@@ -73,6 +73,12 @@ const routes: RouteRecordRaw[] = [
         component: () => import('@/views/DeadTuple.vue'),
         meta: { title: '死元组监测' },
       },
+      {
+        path: 'db-sampling',
+        name: 'DbSamplingStats',
+        component: () => import('@/views/DbSamplingStats.vue'),
+        meta: { title: '数据库采样统计' },
+      },
     ],
   },
 ]

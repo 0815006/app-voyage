@@ -66,6 +66,8 @@ public class SamplingTaskServiceImpl
     private static final int QUERY_TIMEOUT_SECONDS = 10;
     /** 单次采样最大落库行数（防超大结果集打爆明细表） */
     private static final int MAX_ROWS_PER_SAMPLE = 5000;
+    /** 绘图配置 JSON 长度上限（黑盒存取不解析语义，仅做防滥用长度防护） */
+    private static final int MAX_CHART_CONFIG_LENGTH = 8192;
 
     private final SamplingHistoryMapper historyMapper;
     private final DbConnectionConfigService connectionService;
@@ -104,9 +106,13 @@ public class SamplingTaskServiceImpl
 
     @Override
     public List<SamplingTask> listTasks(String empNo) {
-        return list(new LambdaQueryWrapper<SamplingTask>()
+        List<SamplingTask> tasks = list(new LambdaQueryWrapper<SamplingTask>()
                 .eq(SamplingTask::getEmpNo, empNo)
                 .orderByDesc(SamplingTask::getCreateTime));
+        // 回填已采集行数：前端据此判定“有数据即锁定任务定义”并在清理前提示行数
+        // （单操作者任务量小，逐条走 task_id 索引 count，不引聚合查询的列名大小写问题）
+        tasks.forEach(t -> t.setHistoryCount(countHistory(t.getId())));
+        return tasks;
     }
 
     @Override
@@ -115,6 +121,7 @@ public class SamplingTaskServiceImpl
         if (task == null) {
             throw new BusinessException(404, "采样任务不存在或无权操作");
         }
+        task.setHistoryCount(countHistory(task.getId()));
         return task;
     }
 
@@ -122,6 +129,7 @@ public class SamplingTaskServiceImpl
     @Transactional
     public SamplingTask saveTask(String empNo, SamplingTask task) {
         validateSql(task.getCustomSql());
+        validateChartConfig(task.getChartConfig());
         if (task.getStartTime() == null || task.getEndTime() == null) {
             throw new BusinessException("采样起止时间窗口不能为空");
         }
@@ -143,22 +151,31 @@ public class SamplingTaskServiceImpl
             task.setId(null); // 交给雪花主键生成
             task.setStatus(STATUS_STOPPED);
             save(task);
-            log.info("[采样任务] 新增: id={}, name={}, connectionId={}, empNo={}",
-                    task.getId(), task.getTaskName(), task.getConnectionId(), empNo);
+            log.info("[采样任务] 新增: id={}, name={}, connectionId={}, empNo={}, 绘图配置={}字符",
+                    task.getId(), task.getTaskName(), task.getConnectionId(), empNo,
+                    task.getChartConfig() == null ? 0 : task.getChartConfig().length());
         } else {
             // —— 更新 ——
             SamplingTask existing = getOwned(empNo, task.getId());
             if (existing == null) {
                 throw new BusinessException(404, "采样任务不存在或无权操作");
             }
-            if (STATUS_RUNNING.equals(existing.getStatus())) {
+            if (STATUS_RUNNING.equals(existing.getStatus()) || runningHandles.containsKey(existing.getId())) {
                 throw new BusinessException("任务运行中，请先停止再编辑");
+            }
+            // 任务定义锁定：已采集过数据的任务不允许改定义（旧数据会与新 SQL 语义冲突），
+            // 出口只有两个：清理已采集记录后编辑，或另建新任务。
+            long sampled = countHistory(existing.getId());
+            if (sampled > 0) {
+                throw new BusinessException("该任务已有 " + sampled + " 行采样记录，请先清理已采集记录后再编辑，或另建新任务");
             }
             checkConnectionOwned(empNo, task.getConnectionId());
             probeColumnsOrThrow(empNo, task); // 保存前验证 SQL 可解析，写错列名/语法即时拦截
-            task.setStatus(existing.getStatus()); // 状态由启动/停止接口驱动，编辑不改
+            task.setStatus(existing.getStatus()); // 状态由启动/停止/清理接口驱动，编辑不改
             updateById(task);
-            log.info("[采样任务] 更新: id={}, name={}, empNo={}", task.getId(), task.getTaskName(), empNo);
+            log.info("[采样任务] 更新: id={}, name={}, empNo={}, 绘图配置={}字符", task.getId(),
+                    task.getTaskName(), empNo,
+                    task.getChartConfig() == null ? 0 : task.getChartConfig().length());
         }
         return task;
     }
@@ -257,6 +274,37 @@ public class SamplingTaskServiceImpl
             wrapper.le(SamplingHistory::getSamplingTime, end);
         }
         return historyMapper.selectList(wrapper);
+    }
+
+    @Override
+    @Transactional
+    public int clearHistory(String empNo, String taskId) {
+        SamplingTask task = getOwned(empNo, taskId);
+        if (task == null) {
+            throw new BusinessException(404, "采样任务不存在或无权操作");
+        }
+        // 清理与采样写入不得并发（边清边攒语义不干净），运行中必须先停止
+        if (STATUS_RUNNING.equals(task.getStatus()) || runningHandles.containsKey(taskId)) {
+            throw new BusinessException("任务运行中，请先停止再清理已采集记录");
+        }
+        int deleted = historyMapper.delete(new LambdaQueryWrapper<SamplingHistory>()
+                .eq(SamplingHistory::getTaskId, taskId));
+        // 状态归位 STOPPED：已完成(COMPLETED)的任务清理后若不归位，启动接口会继续拒启，
+        // “清完就能改定义重跑”走不通
+        if (!STATUS_STOPPED.equals(task.getStatus())) {
+            task.setStatus(STATUS_STOPPED);
+            updateById(task);
+        }
+        log.info("[采样清理] 已采集记录清空: taskId={}, name={}, 删除={}行, 状态归位STOPPED, 操作人={}",
+                taskId, task.getTaskName(), deleted, empNo);
+        return deleted;
+    }
+
+    /** 统计任务已落库的采样明细行数（用于任务定义锁定判定）。 */
+    private long countHistory(String taskId) {
+        Long count = historyMapper.selectCount(new LambdaQueryWrapper<SamplingHistory>()
+                .eq(SamplingHistory::getTaskId, taskId));
+        return count == null ? 0L : count;
     }
 
     // ==================== 列结构预览（SQL 解析画图适配） ====================
@@ -468,6 +516,13 @@ public class SamplingTaskServiceImpl
             previewColumns(empNo, task.getConnectionId(), task.getCustomSql());
         } catch (BusinessException e) {
             throw new BusinessException("采样 SQL 校验未通过：" + e.getMessage());
+        }
+    }
+
+    /** 绘图配置长度卡口：后端不解析 JSON 语义（黑盒原则），只防越界写入。 */
+    private void validateChartConfig(String chartConfig) {
+        if (chartConfig != null && chartConfig.length() > MAX_CHART_CONFIG_LENGTH) {
+            throw new BusinessException("绘图配置内容过长（超过 " + MAX_CHART_CONFIG_LENGTH + " 字符），请精简列选择后重试");
         }
     }
 

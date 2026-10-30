@@ -19,9 +19,10 @@ import java.util.Map;
 /**
  * 死元组监测采样 Controller。
  * <p>
- * 后端保持完全通用：任务 CRUD、启停控制与采样明细查询，
- * 明细以「采样时间 + 原始行 JSON」原样返回，不做任何业务语义解析
- * （死元组表名筛选、指标计算、波动图绘制均由前端垂直闭环完成）。
+ * 后端保持完全通用：任务 CRUD、启停控制、已采集记录清理与采样明细查询，
+ * 明细以「采样时间 + 原始行 JSON」原样返回，chart_config 按黑盒原样存取，
+ * 不做任何业务语义解析（筛选列/筛选项/展示列的选取与波动图绘制均由前端完成）。
+ * 任务定义锁定：运行中或已有采样记录时禁止编辑，需先停止并清理记录。
  * 所有接口按操作员工号(EmpContext)隔离。
  *
  * @author voyage
@@ -57,7 +58,7 @@ public class SamplingController {
         return Result.ok(samplingTaskService.getTask(EmpContext.getEmpNo(), id));
     }
 
-    /** 新增或更新任务（运行中禁止编辑；SQL 卡口仅允许 SELECT/WITH）。 */
+    /** 新增或更新任务（运行中或已有采样记录时禁止编辑；SQL 卡口仅允许 SELECT/WITH）。 */
     @PostMapping("/task")
     public Result<SamplingTask> saveTask(@RequestBody SamplingTask task) {
         return Result.ok(samplingTaskService.saveTask(EmpContext.getEmpNo(), task));
@@ -122,5 +123,16 @@ public class SamplingController {
             }
             return new SamplingHistoryRow(h.getSamplingTime(), row);
         }).toList());
+    }
+
+    /**
+     * 清理该任务的全部已采集记录（保留任务定义，不可恢复）。
+     * 运行中需先停止；清理后状态归位 STOPPED，任务定义随之可编辑。
+     *
+     * @return 实际删除的行数（前端二次确认时可先以本地 history 行数提示）
+     */
+    @DeleteMapping("/task/{id}/history")
+    public Result<Integer> clearHistory(@PathVariable String id) {
+        return Result.ok(samplingTaskService.clearHistory(EmpContext.getEmpNo(), id));
     }
 }

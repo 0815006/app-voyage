@@ -75,6 +75,10 @@
         <el-icon><DataLine /></el-icon>
         <template #title>死元组监测</template>
       </el-menu-item>
+      <el-menu-item index="/db-sampling">
+        <el-icon><Histogram /></el-icon>
+        <template #title>数据库采样统计</template>
+      </el-menu-item>
 
     </el-menu>
   </aside>
@@ -83,7 +87,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useRoute } from 'vue-router'
-import { Monitor, Document, Search, TrendCharts, Setting, Collection, ChatDotRound, Cpu, DataAnalysis, Files, DataLine } from '@element-plus/icons-vue'
+import { Monitor, Document, Search, TrendCharts, Setting, Collection, ChatDotRound, Cpu, DataAnalysis, Files, DataLine, Histogram } from '@element-plus/icons-vue'
 
 const props = defineProps<{
   collapsed: boolean
